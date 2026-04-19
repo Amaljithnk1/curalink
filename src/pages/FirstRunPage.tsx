@@ -38,7 +38,7 @@ export default function FirstRunPage() {
   const [medInput, setMedInput] = useState('');
   const [spotlightQuery, setSpotlightQuery] = useState('');
   const [isFocused, setIsFocused] = useState(false);
-  const [inkPhase, setInkPhase] = useState<'bloom' | 'settle' | 'done'>('bloom');
+  const [_inkPhase, setInkPhase] = useState<'bloom' | 'settle' | 'done'>('bloom');
 
   // ── Ink bloom sequence ────────────────────────────────────────
   useEffect(() => {

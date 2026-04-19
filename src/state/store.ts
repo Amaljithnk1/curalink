@@ -51,7 +51,7 @@ export const useResearchStore = create<ResearchState>()(
 
       setActiveRevision: (id: string) => set({ activeRevisionId: id }),
 
-      openDrawer: (citationId: CitationId, supportsClaim = null) => set({ drawerOpen: true, drawerCitationId: citationId, drawerSupportsClaim: supportsClaim }),
+      openDrawer: (citationId: CitationId, supportsClaim?: string) => set({ drawerOpen: true, drawerCitationId: citationId, drawerSupportsClaim: supportsClaim ?? null }),
 
       closeDrawer: () => set({ drawerOpen: false, drawerCitationId: null, drawerSupportsClaim: null }),
 

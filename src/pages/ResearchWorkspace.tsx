@@ -773,7 +773,7 @@ export default function ResearchWorkspace() {
     context, viewMode, setViewMode, revisions, activeRevisionId,
     addRevision, setActiveRevision, setRevisions, appState, setAppState,
     drawerOpen, drawerCitationId, drawerSupportsClaim, openDrawer, closeDrawer,
-    highlightedCitationId, setHighlightedCitation, sessionId, setSessionId, clearRevisions,
+    highlightedCitationId, setHighlightedCitation, sessionId, setSessionId,
   } = useResearchStore();
   const setContextStore = useResearchStore((s) => s.setContext);
 
