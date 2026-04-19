@@ -12,7 +12,6 @@ from core.schemas import RunRequest, Revision
 from core.utils import now_ts
 from retrievers.pubmed import fetch_pubmed_candidates
 from retrievers.openalex import fetch_openalex_candidates
-from retrievers.clinicaltrials import fetch_trials_candidates
 from pipeline.expand import expand_queries
 from pipeline.dedupe import dedupe_publications
 from pipeline.rank import rank_publications, rank_trials
@@ -79,23 +78,17 @@ async def run(req: RunRequest):
             per_page=settings.OPENALEX_PER_PAGE,
             mailto=settings.OPENALEX_MAILTO,
         )
-        tr_task = fetch_trials_candidates(
-            client,
-            condition=condition,
-            term=trials_term,
-            page_size=settings.TRIALS_PAGE_SIZE,
-            user_location=location,
-        )
+        tr_task = asyncio.sleep(0)  # trials handled client-side
 
         results = await asyncio.gather(pub_task, oa_task, tr_task, return_exceptions=True)
         pubmed_candidates = results[0] if isinstance(results[0], list) else []
         openalex_candidates = results[1] if isinstance(results[1], list) else []
-        trials_candidates = results[2] if isinstance(results[2], list) else []
+        trials_candidates: List[Dict[str, Any]] = []
 
     # Counts BEFORE dedupe
     pubmedCount = len(pubmed_candidates)
     openalexCount = len(openalex_candidates)
-    trialsCount = len(trials_candidates)
+    trialsCount = 0
 
     # Merge publications and dedupe
     pub_candidates = pubmed_candidates + openalex_candidates
@@ -183,3 +176,12 @@ async def run(req: RunRequest):
 
     # Validate with Pydantic (ensures it matches your frontend contract)
     return Revision(**revision).model_dump()
+
+
+@app.post("/rank-trials")
+async def rank_trials_endpoint(req: dict):
+    trials = req.get("trials", [])
+    query = req.get("query", "")
+    location = req.get("location", "")
+    ranked = rank_trials(trials, query, location)
+    return {"trials": ranked[:settings.TOP_TRIALS]}

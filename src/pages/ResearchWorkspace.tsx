@@ -886,6 +886,59 @@ export default function ResearchWorkspace() {
         throw new Error(`HTTP ${res.status}`);
       }
       const data = await res.json();
+
+      // Fetch trials from browser to bypass server IP block
+      let trials: any[] = [];
+      try {
+        const trialsRes = await fetch(
+          `https://clinicaltrials.gov/api/v2/studies?format=json&pageSize=100&query.cond=${encodeURIComponent(conditionToCheck)}&query.term=${encodeURIComponent(q)}&filter.overallStatus=RECRUITING,ACTIVE_NOT_RECRUITING`
+        );
+        const trialsData = await trialsRes.json();
+        trials = (trialsData.studies || []).map((s: any, i: number) => {
+          const prot = s.protocolSection || {};
+          const ident = prot.identificationModule || {};
+          const statusMod = prot.statusModule || {};
+          const elig = prot.eligibilityModule || {};
+          const contacts = prot.contactsLocationsModule || {};
+          const locs = (contacts.locations || []).slice(0, 5).map((l: any) =>
+            [l.city, l.country].filter(Boolean).join(', ')
+          );
+          const nctId = ident.nctId || '';
+          return {
+            citationId: `T${i + 1}`,
+            title: ident.briefTitle || '',
+            nctId,
+            status: statusMod.overallStatus || 'ACTIVE',
+            locations: locs,
+            locationMatch: locs.some((l: string) =>
+              l.toLowerCase().includes((context.location || '').toLowerCase())
+            ) ? 'city' : 'none',
+            eligibility: (elig.eligibilityCriteria || '').split('\n').filter(Boolean).slice(0, 5),
+            contact: null,
+            url: `https://clinicaltrials.gov/study/${nctId}`,
+            snippet: '',
+          };
+        });
+
+        // Send to backend for ranking
+        const engineUrl = import.meta.env.VITE_ENGINE_URL || 'http://localhost:8000';
+        const rankRes = await fetch(`${engineUrl}/rank-trials`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ trials, query: q, location: context.location || '' }),
+        });
+        const rankData = await rankRes.json();
+        data.revision.trials = rankData.trials;
+
+        // Update retrieval stats
+        data.revision.retrieval.trialsCount = trials.length;
+        data.revision.retrieval.shownTrials = rankData.trials.length;
+        data.revision.retrieval.poolTotal = data.revision.retrieval.poolTotal + trials.length;
+      } catch (e) {
+        console.error('Trials fetch failed:', e);
+        data.revision.trials = [];
+      }
+
       setSessionId(data.sessionId);
       addRevision(data.revision);
       setActiveRevision(data.revision.id);
