@@ -87,9 +87,10 @@ async def run(req: RunRequest):
             user_location=location,
         )
 
-        pubmed_candidates, openalex_candidates, trials_candidates = await asyncio.gather(
-            pub_task, oa_task, tr_task
-        )
+        results = await asyncio.gather(pub_task, oa_task, tr_task, return_exceptions=True)
+        pubmed_candidates = results[0] if isinstance(results[0], list) else []
+        openalex_candidates = results[1] if isinstance(results[1], list) else []
+        trials_candidates = results[2] if isinstance(results[2], list) else []
 
     # Counts BEFORE dedupe
     pubmedCount = len(pubmed_candidates)

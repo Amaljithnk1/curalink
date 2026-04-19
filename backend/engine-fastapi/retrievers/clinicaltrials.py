@@ -69,7 +69,10 @@ async def fetch_trials_candidates(
         params["query.term"] = f"{extra} {geo}".strip()
 
     # ----------- API call ------------------------------------------
-    r = await client.get(CT_BASE, params=params, timeout=20)
+    r = await client.get(CT_BASE, params=params, timeout=20, headers={
+                "User-Agent": "CuraLink/1.0 (medical research assistant)",
+                "Accept": "application/json"
+            })
     r.raise_for_status()
     data = r.json()
     studies = data.get("studies", []) or []
