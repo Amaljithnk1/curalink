@@ -185,3 +185,22 @@ async def rank_trials_endpoint(req: dict):
     location = req.get("location", "")
     ranked = rank_trials(trials, query, location)
     return {"trials": ranked[:settings.TOP_TRIALS]}
+
+
+@app.post("/merge-and-brief")
+async def merge_and_brief(req: dict):
+    """
+    Browser already ranked the trials. Rebuild the brief so the
+    Clinical-Trials section cites T1/T2 instead of 'No strong trials…'.
+    """
+    condition = req.get("condition", "")
+    query     = req.get("query", "")
+    papers    = req.get("papers", [])   # already have citationId P#
+    trials    = req.get("trials", [])   # ranked trials with citationId T#
+
+    new_brief = build_deterministic_brief(condition, query, papers, trials)
+
+    valid_ids = {p["citationId"] for p in papers} | {t["citationId"] for t in trials}
+    new_brief = validate_brief_citations(new_brief, valid_ids)
+
+    return {"brief": new_brief}

@@ -930,6 +930,25 @@ export default function ResearchWorkspace() {
         const rankData = await rankRes.json();
         data.revision.trials = rankData.trials;
 
+        // Rebuild brief so clinical-trials section cites T1/T2 properly
+        try {
+          const mergeRes = await fetch(`${engineUrl}/merge-and-brief`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              condition: context.condition,
+              query: q,
+              papers: data.revision.papers,
+              trials: rankData.trials,
+              brief: data.revision.brief,
+            }),
+          });
+          const mergeData = await mergeRes.json();
+          data.revision.brief = mergeData.brief;
+        } catch (e) {
+          console.error('merge-and-brief failed:', e);
+        }
+
         // Update retrieval stats
         data.revision.retrieval.trialsCount = trials.length;
         data.revision.retrieval.shownTrials = rankData.trials.length;
