@@ -90,3 +90,4 @@ class RunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     query: str
     context: PatientContext
+    revisionId: Optional[str] = None

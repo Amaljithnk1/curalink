@@ -1,5 +1,5 @@
 import { useResearchStore } from '@/state/store';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useEffect, useState, FormEvent, useRef } from 'react';
 import { ViewMode, CitationId, Paper, Trial, ConfidenceLevel } from '@/state/types';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
@@ -117,7 +117,11 @@ function CitationConstellation({
     }),
   ];
 
-  const sourceNodes = nodes.filter((node) => node.id !== 'query') as Array<{
+  const sourceNodes = nodes.filter((node) =>
+    node.id !== 'query' &&
+    node.x !== undefined &&
+    node.y !== undefined
+  ) as Array<{
     id: CitationId; label: string; x: number; y: number;
     type: 'pubmed' | 'openalex' | 'trial';
   }>;
@@ -340,7 +344,7 @@ function BriefSection({
   citations: CitationId[]; displayMap: Map<CitationId, number>;
   highlightedId: CitationId | null;
   onHover: (id: CitationId | null) => void;
-  onClick: (id: CitationId) => void;
+  onClick: (id: CitationId, sentence?: string) => void;
   delay?: number;
 }) {
   const renderContent = () => {
@@ -359,7 +363,7 @@ function BriefSection({
             className="text-burgundy/70 font-mono text-[9px] cursor-pointer hover:text-burgundy hover:bg-burgundy/10 rounded px-0.5 ml-0.5 transition-all duration-200"
             onMouseEnter={() => onHover(citId)}
             onMouseLeave={() => onHover(null)}
-            onClick={() => onClick(citId)}
+            onClick={() => onClick(citId, text)}
           >
             {displayNum}
           </sup>
@@ -747,18 +751,36 @@ function TrialsLedger({ trials, onClickTrial }: { trials: Trial[]; onClickTrial:
 }
 
 // ============================================
+// Medical relevance guard
+// ============================================
+const MEDICAL_KEYWORDS = [
+  'disease', 'disorder', 'syndrome', 'cancer', 'diabetes', 'tumor',
+  'infection', 'therapy', 'treatment', 'parkinson', 'alzheimer', 'depression', 'anxiety',
+  'heart', 'lung', 'brain', 'blood', 'pain', 'chronic', 'acute', 'symptoms',
+];
+
+const isMedicalCondition = (text: string): boolean => {
+  const lower = text.toLowerCase();
+  if (lower.length < 3) return false;
+  return MEDICAL_KEYWORDS.some((k) => lower.includes(k)) || lower.split(' ').length >= 2;
+};
+
+// ============================================
 // Main Component
 // ============================================
 export default function ResearchWorkspace() {
   const {
     context, viewMode, setViewMode, revisions, activeRevisionId,
-    addRevision, setActiveRevision, appState, setAppState,
-    drawerOpen, drawerCitationId, openDrawer, closeDrawer,
-    highlightedCitationId, setHighlightedCitation,
+    addRevision, setActiveRevision, setRevisions, appState, setAppState,
+    drawerOpen, drawerCitationId, drawerSupportsClaim, openDrawer, closeDrawer,
+    highlightedCitationId, setHighlightedCitation, sessionId, setSessionId, clearRevisions,
   } = useResearchStore();
   const setContextStore = useResearchStore((s) => s.setContext);
 
   const navigate = useNavigate();
+  const routerLocation = useLocation();
+  const didAutoRunRef = useRef(false);
+  const initialQuery = (routerLocation.state as any)?.initialQuery as string | undefined;
   const [queryInput, setQueryInput] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editCondition, setEditCondition] = useState(context?.condition || '');
@@ -767,6 +789,30 @@ export default function ResearchWorkspace() {
   useEffect(() => {
     if (!context) navigate('/');
   }, [context, navigate]);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    fetch(`${import.meta.env.VITE_API_URL}/api/sessions/${sessionId}`, {
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+      },
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (!data.revisions || data.revisions.length === 0) {
+          useResearchStore.getState().clearRevisions();
+          return;
+        }
+        const restoredContext = data.revisions[0]?.context;
+        if (!restoredContext) return;
+        if (!isMedicalCondition(restoredContext.condition)) return;
+        if (restoredContext.condition.toLowerCase() !== (context?.condition || '').toLowerCase()) return;
+        setRevisions(data.revisions);
+        setActiveRevision(data.revisions[data.revisions.length - 1].id);
+      })
+      .catch(console.error);
+  }, []);
 
   useEffect(() => {
     if (context) {
@@ -789,6 +835,19 @@ export default function ResearchWorkspace() {
 
   if (!context) return null;
 
+  useEffect(() => {
+    if (!context) return;
+    if (didAutoRunRef.current) return;
+    if (!initialQuery) return;
+
+    didAutoRunRef.current = true;
+    setQueryInput(initialQuery);
+    runQuery(initialQuery);
+
+    // clear state so refresh doesn't rerun
+    navigate('/research', { replace: true, state: {} });
+  }, [context, initialQuery]);
+
   const activeRevision = revisions.find((r) => r.id === activeRevisionId);
   const displayMap = activeRevision
     ? getCitationDisplayMap(activeRevision.papers, activeRevision.trials)
@@ -801,30 +860,48 @@ export default function ResearchWorkspace() {
       ])
     : new Set<CitationId>();
 
-  const handleSubmitQuery = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!queryInput.trim()) return;
+  const runQuery = async (q: string, overrideCondition?: string) => {
+    
+    const conditionToCheck = overrideCondition || context?.condition || '';
+    console.log('condition check:', conditionToCheck, isMedicalCondition(conditionToCheck));
+    if (!isMedicalCondition(conditionToCheck)) {
+      setAppState('no_results');
+      return;
+    }
     setAppState('running');
     try {
-      const response = await fetch('http://localhost:8000/run', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/research/run`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          context: context,
-          query: queryInput.trim(),
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, query: q, context: { ...context, condition: conditionToCheck } }),
       });
-      const result = await response.json();
-      addRevision(result);
-      setActiveRevision(result.id);
-      setAppState('complete');
+      if (!res.ok) {
+        if (res.status === 400) {
+          const err = await res.json();
+          if (err.error === 'invalid_condition') {
+            setAppState('no_results');
+            return;
+          }
+        }
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      setSessionId(data.sessionId);
+      addRevision(data.revision);
+      setActiveRevision(data.revision.id);
+      setViewMode('brief');
       setQueryInput('');
     } catch (error) {
       console.error('Error submitting query:', error);
-      setAppState('idle');
+      setAppState('context_set');
     }
+  };
+
+  const handleSubmitQuery = async (e: FormEvent) => {
+    e.preventDefault();
+    const q = queryInput.trim();
+    if (!q) return;
+    await runQuery(q);
   };
 
   const drawerPaper = activeRevision?.papers.find((p) => p.citationId === drawerCitationId);
@@ -951,30 +1028,54 @@ export default function ResearchWorkspace() {
       {/* Main Layout */}
       <div className="px-6 py-8 max-w-7xl mx-auto flex flex-col gap-8 xl:flex-row">
         <main className="flex-1 min-w-0">
-          {!activeRevision ? (
+          {!activeRevision || appState === 'no_results' || appState === 'running' ? (
             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="text-center py-20">
-              <div className="inline-block mb-6">
-                <div className="w-16 h-16 rounded-full bg-burgundy/[0.04] border border-burgundy/10 flex items-center justify-center mx-auto">
-                  <span className="text-2xl">⌕</span>
-                </div>
-              </div>
-              <p className="font-serif text-xl text-[#6B1D2A] mb-2">How shall we begin?</p>
-              <p className="text-sm font-sans text-[#1a1a1a] mb-8 max-w-md mx-auto">
-                Ask a research question about <span className="text-[#6B1D2A] font-medium">{context.condition}</span> to generate an evidence synthesis.
-              </p>
-              <div className="flex flex-wrap justify-center gap-2">
-                {[
-                  `Latest treatment options for ${context.condition}`,
-                  `Active clinical trials${context.location ? ` near ${context.location}` : ''}`,
-                  `Recent breakthroughs in ${context.condition}`,
-                ].map((q) => (
-                  <button key={q}
-                    onClick={() => { setQueryInput(q); document.getElementById('query-bar')?.focus(); }}
-                    className="px-3.5 py-2 text-[11px] font-sans text-[#6B1D2A] bg-white/80 border border-burgundy/10 rounded-full hover:bg-burgundy/[0.08] hover:text-[#6B1D2A] transition-all duration-300">
-                    {q}
-                  </button>
-                ))}
-              </div>
+              {appState === 'no_results' ? (
+                <>
+                  <p className="font-serif text-xl text-burgundy/60 mb-3">
+                    No medical research database found for "{context?.condition}"
+                  </p>
+                  <p className="text-sm font-sans text-muted-foreground/50 mb-8">
+                    Try one of these instead:
+                  </p>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {["Parkinson's disease", "Lung cancer", "Diabetes", "Alzheimer's disease"].map((s) => (
+                      <button key={s} onClick={() => {
+                        setContextStore({ condition: s, location: context?.location, medications: context?.medications });
+                        runQuery(s, s);
+                      }}
+                        className="px-4 py-2 text-[11px] font-sans text-burgundy/70 bg-white border border-burgundy/10 rounded-full hover:bg-burgundy/5 transition-all">
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="inline-block mb-6">
+                    <div className="w-16 h-16 rounded-full bg-burgundy/[0.04] border border-burgundy/10 flex items-center justify-center mx-auto">
+                      <span className="text-2xl">⌕</span>
+                    </div>
+                  </div>
+                  <p className="font-serif text-xl text-[#6B1D2A] mb-2">How shall we begin?</p>
+                  <p className="text-sm font-sans text-[#1a1a1a] mb-8 max-w-md mx-auto">
+                    Ask a research question about <span className="text-[#6B1D2A] font-medium">{context.condition}</span> to generate an evidence synthesis.
+                  </p>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {[
+                      `Latest treatment options for ${context.condition}`,
+                      `Active clinical trials${context.location ? ` near ${context.location}` : ''}`,
+                      `Recent breakthroughs in ${context.condition}`,
+                    ].map((q) => (
+                      <button key={q}
+                        onClick={() => { setQueryInput(q); document.getElementById('query-bar')?.focus(); }}
+                        className="px-3.5 py-2 text-[11px] font-sans text-[#6B1D2A] bg-white/80 border border-burgundy/10 rounded-full hover:bg-burgundy/[0.08] hover:text-[#6B1D2A] transition-all duration-300">
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
             </motion.div>
           ) : (
             <div>
@@ -1014,7 +1115,7 @@ export default function ResearchWorkspace() {
 
         {/* Gutter */}
         <aside className="w-64 shrink-0 hidden lg:block">
-          {activeRevision && viewMode === 'brief' ? (
+          {activeRevision && appState !== 'no_results' && viewMode === 'brief' ? (
             <div className="sticky top-20">
               <p className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground/30 mb-3">Sources</p>
               {[...activeRevision.papers, ...activeRevision.trials].map((item, idx) => {
@@ -1111,7 +1212,7 @@ export default function ResearchWorkspace() {
                   <div className="h-px flex-1 bg-parchment-200/50" />
                 </div>
                 <p className="text-[13px] font-serif italic text-muted-foreground/50 p-4 bg-burgundy/[0.03] rounded-lg border border-burgundy/[0.08]">
-                  "Referenced in the research brief for {context?.condition}"
+                  "{drawerSupportsClaim || `Referenced in the research brief for ${context?.condition}`}"
                 </p>
               </div>
               {drawerPaper.relevanceScore !== undefined && (

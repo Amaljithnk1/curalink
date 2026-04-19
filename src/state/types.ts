@@ -4,7 +4,7 @@ export type TrialId = `T${number}`;
 export type CitationId = PaperId | TrialId;
 
 // App States
-export type AppState = 'idle' | 'context_set' | 'running' | 'complete';
+export type AppState = 'idle' | 'context_set' | 'running' | 'complete' | 'no_results';
 export type ViewMode = 'brief' | 'papers' | 'trials';
 export type ConfidenceLevel = 'strong' | 'moderate' | 'emerging';
 export type TrialStatus = 'RECRUITING' | 'COMPLETED' | 'ACTIVE' | 'SUSPENDED';
@@ -92,6 +92,8 @@ export interface ResearchState {
   drawerOpen: boolean;
   drawerCitationId: CitationId | null;
   highlightedCitationId: CitationId | null;
+  sessionId: string | null;
+  drawerSupportsClaim: string | null;
 
   // Actions
   setContext: (context: PatientContext) => void;
@@ -99,7 +101,11 @@ export interface ResearchState {
   setAppState: (state: AppState) => void;
   addRevision: (revision: Revision) => void;
   setActiveRevision: (id: string) => void;
-  openDrawer: (citationId: CitationId) => void;
+  setRevisions: (revs: Revision[]) => void;
+  clearRevisions: () => void;
+  openDrawer: (citationId: CitationId, supportsClaim?: string) => void;
   closeDrawer: () => void;
   setHighlightedCitation: (id: CitationId | null) => void;
+  setSessionId: (id: string | null) => void;
+  clearSession?: () => void;
 }

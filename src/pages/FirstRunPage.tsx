@@ -26,6 +26,8 @@ function PaperGrain() {
 export default function FirstRunPage() {
   const navigate = useNavigate();
   const setContext = useResearchStore((s) => s.setContext);
+  const setSessionId = useResearchStore((s) => s.setSessionId);
+  const clearRevisions = useResearchStore((s) => s.clearRevisions);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animFrameRef = useRef<number>(0);
   const mouseRef = useRef({ x: -999, y: -999 });
@@ -95,10 +97,10 @@ export default function FirstRunPage() {
 
       // Flowing blobs — richer, more prominent
       const blobs = [
-        { x: W * 0.5 + Math.cos(t * 0.7) * W * 0.28, y: H * 0.38 + Math.sin(t * 0.5) * H * 0.28, color: 'rgba(107,29,42,', alpha: 0.09, size: W * 0.55 },
-        { x: W * 0.82 + Math.cos(t * 0.4 + 2) * W * 0.12, y: H * 0.72 + Math.sin(t * 0.6 + 2) * H * 0.2, color: 'rgba(91,122,94,', alpha: 0.07, size: W * 0.42 },
-        { x: W * 0.15 + Math.cos(t * 0.55 + 4) * W * 0.1, y: H * 0.28 + Math.sin(t * 0.45 + 4) * H * 0.22, color: 'rgba(184,134,11,', alpha: 0.055, size: W * 0.32 },
-        { x: W * 0.75 + Math.cos(t * 0.3 + 1) * W * 0.08, y: H * 0.15 + Math.sin(t * 0.5 + 3) * H * 0.1, color: 'rgba(180,60,80,', alpha: 0.045, size: W * 0.22 },
+        { x: W * 0.5 + Math.cos(t * 0.7) * W * 0.28, y: H * 0.38 + Math.sin(t * 0.5) * H * 0.28, color: 'rgba(107,29,42,', alpha: 0.04, size: W * 0.55 },
+        { x: W * 0.82 + Math.cos(t * 0.4 + 2) * W * 0.12, y: H * 0.72 + Math.sin(t * 0.6 + 2) * H * 0.2, color: 'rgba(91,122,94,', alpha: 0.03, size: W * 0.42 },
+        { x: W * 0.15 + Math.cos(t * 0.55 + 4) * W * 0.1, y: H * 0.28 + Math.sin(t * 0.45 + 4) * H * 0.22, color: 'rgba(184,134,11,', alpha: 0.025, size: W * 0.32 },
+        { x: W * 0.75 + Math.cos(t * 0.3 + 1) * W * 0.08, y: H * 0.15 + Math.sin(t * 0.5 + 3) * H * 0.1, color: 'rgba(180,60,80,', alpha: 0.02, size: W * 0.22 },
       ];
 
       blobs.forEach(b => {
@@ -189,6 +191,8 @@ export default function FirstRunPage() {
   // ── Handlers ─────────────────────────────────────────────────
   const handleStartResearch = () => {
     if (!condition.trim()) return;
+    setSessionId(null);
+    clearRevisions();
     setContext({
       condition: condition.trim(),
       location: location.trim() || undefined,
@@ -200,8 +204,18 @@ export default function FirstRunPage() {
   const handleSpotlightSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!spotlightQuery.trim()) return;
-    setContext({ condition: spotlightQuery.trim() });
-    navigate('/research');
+
+    const conditionToUse = condition.trim() || spotlightQuery.trim();
+
+    setSessionId(null);
+    clearRevisions();
+    setContext({
+      condition: conditionToUse,
+      location: location.trim() || undefined,
+      medications: medications.length ? medications : undefined,
+    });
+
+    navigate('/research', { state: { initialQuery: spotlightQuery.trim() } });
   };
 
   const handleAddMedication = (e: React.KeyboardEvent) => {
@@ -213,10 +227,10 @@ export default function FirstRunPage() {
   };
 
   const quickStarts = [
-    { label: 'Lung Cancer Treatment', query: 'Latest treatment for lung cancer' },
-    { label: 'Diabetes Trials',        query: 'Clinical trials for diabetes' },
-    { label: "Alzheimer's Research",   query: "Top researchers in Alzheimer's disease" },
-    { label: "Parkinson's DBS",        query: "Deep brain stimulation for Parkinson's" },
+    { label: 'Lung Cancer Treatment', condition: 'Lung cancer', query: 'Latest treatment options' },
+    { label: 'Diabetes Trials', condition: 'Diabetes', query: 'Clinical trials' },
+    { label: "Alzheimer's Research", condition: "Alzheimer's disease", query: 'Top researchers' },
+    { label: "Parkinson's DBS", condition: "Parkinson's disease", query: 'Deep brain stimulation' },
   ];
 
   // ── Ink bloom logo styles ─────────────────────────────────────
@@ -582,9 +596,12 @@ export default function FirstRunPage() {
                 backdropFilter: 'blur(16px)',
                 border: isFocused ? '1px solid rgba(107,29,42,0.16)' : '1px solid rgba(255,255,255,0.8)',
                 boxShadow: isFocused ? '0 8px 32px rgba(107,29,42,0.12), 0 0 0 3px rgba(107,29,42,0.06)' : '0 4px 16px rgba(0,0,0,0.05)',
+                display: 'flex',
+                alignItems: 'center',
+                paddingRight: spotlightQuery.trim() ? '3.25rem' : '1rem',
               }}
             >
-              <span className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color: 'rgba(107,29,42,0.45)' }}>
+              <span className="pl-4 shrink-0" style={{ color: 'rgba(107,29,42,0.45)' }}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
                 </svg>
@@ -596,8 +613,8 @@ export default function FirstRunPage() {
                 onFocus={() => setIsFocused(true)}
                 onBlur={() => setIsFocused(false)}
                 placeholder='"Latest treatment for lung cancer"'
-                className="w-full pr-14 pl-11 py-4 rounded-2xl bg-transparent text-sm font-sans italic"
-                style={{ color: '#1a1a1a', outline: 'none' }}
+                className="flex-1 py-4 pl-3 bg-transparent text-sm font-sans italic"
+                style={{ color: '#1a1a1a', outline: 'none', border: 'none' }}
               />
               <AnimatePresence>
                 {spotlightQuery.trim() && (
@@ -606,8 +623,14 @@ export default function FirstRunPage() {
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.8 }}
                     type="submit"
-                    className="absolute right-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-lg flex items-center justify-center text-white"
-                    style={{ background: 'linear-gradient(135deg, #6B1D2A, #8B2E3D)', boxShadow: '0 4px 12px rgba(107,29,42,0.28)', border: 'none', cursor: 'pointer', fontSize: '16px' }}
+                    className="absolute right-2 h-9 w-9 rounded-lg flex items-center justify-center text-white shrink-0"
+                    style={{
+                      background: 'linear-gradient(135deg, #6B1D2A, #8B2E3D)',
+                      boxShadow: '0 4px 12px rgba(107,29,42,0.28)',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: '16px',
+                    }}
                   >→</motion.button>
                 )}
               </AnimatePresence>
@@ -645,7 +668,16 @@ export default function FirstRunPage() {
               transition={{ delay: 1.5 + idx * 0.08 }}
               whileHover={{ y: -2, boxShadow: '0 10px 24px -12px rgba(107,29,42,0.18)' }}
               whileTap={{ scale: 0.97 }}
-              onClick={() => { setContext({ condition: q.query }); navigate('/research'); }}
+              onClick={() => {
+                setSessionId(null);
+                clearRevisions();
+                setContext({
+                  condition: q.condition,
+                  location: location.trim() || undefined,
+                  medications: medications.length ? medications : undefined,
+                });
+                navigate('/research', { state: { initialQuery: q.query } });
+              }}
               className="px-4 py-2 text-[11px] font-sans rounded-full transition-all duration-200"
               style={{ background: 'rgba(255,255,255,0.75)', backdropFilter: 'blur(12px)', border: '1px solid rgba(107,29,42,0.09)', color: 'rgba(107,29,42,0.65)', cursor: 'pointer' }}
               onMouseOver={e => { e.currentTarget.style.color = '#6B1D2A'; e.currentTarget.style.borderColor = 'rgba(107,29,42,0.20)'; e.currentTarget.style.background = 'rgba(255,255,255,0.95)'; }}

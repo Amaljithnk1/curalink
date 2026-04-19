@@ -1,43 +1,83 @@
-import { create } from 'zustand';
-import { ResearchState, PatientContext, ViewMode, AppState, Revision, CitationId } from './types';
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+import {
+  ResearchState,
+  PatientContext,
+  ViewMode,
+  AppState,
+  Revision,
+  CitationId,
+} from "./types";
 
-export const useResearchStore = create<ResearchState>((set) => ({
-  // Initial state
-  appState: 'idle',
-  viewMode: 'brief',
-  context: null,
-  revisions: [],
-  activeRevisionId: null,
-  drawerOpen: false,
-  drawerCitationId: null,
-  highlightedCitationId: null,
+export const useResearchStore = create<ResearchState>()(
+  persist(
+    (set) => ({
+      // Initial state
+      appState: "idle",
+      viewMode: "brief",
+      context: null,
+      revisions: [],
+      activeRevisionId: null,
 
-  // Actions
-  setContext: (context: PatientContext) =>
-    set({ context, appState: 'context_set' }),
+      // NEW: session persistence for Node/Mongo
+      sessionId: null,
+      drawerSupportsClaim: null,
 
-  setViewMode: (viewMode: ViewMode) =>
-    set({ viewMode }),
+      // Drawer / hover
+      drawerOpen: false,
+      drawerCitationId: null,
+      highlightedCitationId: null,
 
-  setAppState: (appState: AppState) =>
-    set({ appState }),
+      // Actions
+      setContext: (context: PatientContext) => set({ context, appState: "context_set" }),
 
-  addRevision: (revision: Revision) =>
-    set((state) => ({
-      revisions: [...state.revisions, revision],
-      activeRevisionId: revision.id,
-      appState: 'complete',
-    })),
+      setViewMode: (viewMode: ViewMode) => set({ viewMode }),
 
-  setActiveRevision: (id: string) =>
-    set({ activeRevisionId: id }),
+      setAppState: (appState: AppState) => set({ appState }),
 
-  openDrawer: (citationId: CitationId) =>
-    set({ drawerOpen: true, drawerCitationId: citationId }),
+      // NEW
+      setSessionId: (id: string | null) => set({ sessionId: id }),
 
-  closeDrawer: () =>
-    set({ drawerOpen: false, drawerCitationId: null }),
+      setRevisions: (revs: Revision[]) => set({ revisions: revs }),
 
-  setHighlightedCitation: (id: CitationId | null) =>
-    set({ highlightedCitationId: id }),
-}));
+      clearRevisions: () => set({ revisions: [], activeRevisionId: null }),
+
+      addRevision: (revision: Revision) =>
+        set((state) => ({
+          revisions: [...state.revisions, revision],
+          activeRevisionId: revision.id,
+          appState: "complete",
+        })),
+
+      setActiveRevision: (id: string) => set({ activeRevisionId: id }),
+
+      openDrawer: (citationId: CitationId, supportsClaim = null) => set({ drawerOpen: true, drawerCitationId: citationId, drawerSupportsClaim: supportsClaim }),
+
+      closeDrawer: () => set({ drawerOpen: false, drawerCitationId: null, drawerSupportsClaim: null }),
+
+      setHighlightedCitation: (id: CitationId | null) => set({ highlightedCitationId: id }),
+
+      // Optional convenience (use when you add “New Session” button)
+      clearSession: () =>
+        set({
+          appState: "idle",
+          viewMode: "brief",
+          context: null,
+          revisions: [],
+          activeRevisionId: null,
+          sessionId: null,
+          drawerOpen: false,
+          drawerCitationId: null,
+          highlightedCitationId: null,
+        }),
+    }),
+    {
+      name: "curalink-store-v2",
+      partialize: (state) => ({
+        // Only persist session identity and context — revisions come from the server
+        sessionId: state.sessionId,
+        context: state.context,
+      }),
+    }
+  )
+);

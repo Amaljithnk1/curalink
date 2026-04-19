@@ -62,7 +62,9 @@ async def run(req: RunRequest):
         # Retrieve in parallel (depth-first)
         pubmed_q = expanded["pubmed"][0]
         openalex_q = expanded["openalex"][0]
-        trials_term = expanded["trials_term"][0] if expanded.get("trials_term") else query
+        q_lower = query.lower()
+        use_term = any(k in q_lower for k in ["trial", "trials", "treatment", "therapy", "drug", "supplement", "dbs", "deep brain"])
+        trials_term = expanded["trials_term"][0] if use_term else ""
 
         pub_task = fetch_pubmed_candidates(
             client,
@@ -118,11 +120,20 @@ async def run(req: RunRequest):
     valid_ids = set([p["citationId"] for p in top_pubs] + [t["citationId"] for t in top_trs])
     brief = validate_brief_citations(brief, valid_ids)
 
+    if settings.USE_GROQ and settings.GROQ_API_KEY:
+        from llm.groq_provider import GroqProvider
+        provider = GroqProvider(api_key=settings.GROQ_API_KEY, model=settings.GROQ_MODEL)
+        llm_brief = provider.generate_brief(condition, query, location, top_pubs, top_trs)
+        if llm_brief:
+            brief = llm_brief
+            brief = validate_brief_citations(brief, valid_ids)
+
     t1 = time.perf_counter()
     timeSeconds = round(t1 - t0, 3)
+    revision_id = f"R{now_ts()}"
 
     revision = {
-        "id": f"R{now_ts()}",# Node can override later when you add sessions
+        "id": revision_id,
         "query": query,
         "context": req.context.model_dump(),
         "retrieval": {

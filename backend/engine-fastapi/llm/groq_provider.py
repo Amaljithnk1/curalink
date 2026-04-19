@@ -1,3 +1,5 @@
+import json
+import re
 from typing import Any, Dict, List
 from groq import Groq
 
@@ -14,23 +16,28 @@ class GroqProvider:
         self.client = Groq(api_key=api_key)
         self.model = model
 
-    async def generate_brief(self, context: Dict[str, Any], papers: List[Dict[str, Any]], trials: List[Dict[str, Any]]) -> Dict[str, Any]:
-        # NOTE: groq python client is sync; keep it simple for hackathon.
-        evidence = {
-            "context": context,
-            "papers": [{k: p.get(k) for k in ["citationId","title","year","authors","journal","snippet","url"]} for p in papers],
-            "trials": [{k: t.get(k) for k in ["citationId","title","nctId","status","locations","eligibility","contact","url"]} for t in trials],
-        }
+    def generate_brief(self, condition: str, query: str, location: str | None, papers: List[Dict[str, Any]], trials: List[Dict[str, Any]]) -> Dict[str, Any] | None:
+        try:
+            evidence = {
+                "condition": condition,
+                "query": query,
+                "location": location,
+                "papers": [{k: p.get(k) for k in ["citationId","title","year","authors","journal","snippet","url"]} for p in papers],
+                "trials": [{k: t.get(k) for k in ["citationId","title","nctId","status","locations","eligibility","contact","url"]} for t in trials],
+            }
 
-        user = f"Create a structured brief for:\n{evidence}\nReturn JSON only."
-        resp = self.client.chat.completions.create(
-            model=self.model,
-            temperature=0.2,
-            messages=[
-                {"role": "system", "content": SYSTEM},
-                {"role": "user", "content": user},
-            ],
-        )
-        content = resp.choices[0].message.content
-        # Expect JSON; caller should handle json parsing errors gracefully.
-        return {"raw": content}
+            user = f"Create a structured brief for:\n{evidence}\nReturn JSON only."
+            resp = self.client.chat.completions.create(
+                model=self.model,
+                temperature=0.2,
+                messages=[
+                    {"role": "system", "content": SYSTEM},
+                    {"role": "user", "content": user},
+                ],
+            )
+            raw = resp.choices[0].message.content or ""
+            raw = re.sub(r"^```(?:json)?", "", raw.strip()).strip()
+            raw = re.sub(r"```$", "", raw).strip()
+            return json.loads(raw)
+        except Exception:
+            return None
