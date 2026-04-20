@@ -5,7 +5,7 @@ const router = express.Router();
 
 router.post("/run", async (req, res) => {
   try {
-    const { sessionId, query, context } = req.body || {};
+    const { sessionId, query, context, previousQueries } = req.body || {};
     if (!query || !context?.condition) {
       return res.status(400).json({ error: "query and context.condition required" });
     }
@@ -51,7 +51,7 @@ router.post("/run", async (req, res) => {
     const r = await fetch(`${engineUrl}/run`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query, context, revisionId })
+      body: JSON.stringify({ query, context, revisionId, previousQueries: previousQueries || [] })
     });
 
     if (!r.ok) {

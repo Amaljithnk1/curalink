@@ -863,8 +863,9 @@ export default function ResearchWorkspace() {
   const runQuery = async (q: string, overrideCondition?: string) => {
     
     const conditionToCheck = overrideCondition || context?.condition || '';
-    console.log('condition check:', conditionToCheck, isMedicalCondition(conditionToCheck));
-    if (!isMedicalCondition(conditionToCheck)) {
+    // Only validate on first query — follow-ups are always valid in context of the condition
+    const isFollowUp = revisions.length > 0;
+    if (!isFollowUp && !isMedicalCondition(conditionToCheck)) {
       setAppState('no_results');
       return;
     }
