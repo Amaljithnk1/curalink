@@ -13,7 +13,6 @@ from core.utils import now_ts
 from retrievers.pubmed import fetch_pubmed_candidates
 from retrievers.openalex import fetch_openalex_candidates
 from pipeline.expand import expand_queries
-from pipeline.extract import extract_intervention
 from pipeline.dedupe import dedupe_publications
 from pipeline.rank import rank_publications, rank_trials
 from pipeline.brief import build_deterministic_brief
@@ -56,59 +55,31 @@ async def run(req: RunRequest):
     location = (req.context.location or "").strip() or None
     query = req.query.strip()
 
-    if settings.USE_GROQ and settings.GROQ_API_KEY:
-        intervention = extract_intervention(condition, query)
-    else:
-        intervention = query
-    expanded = expand_queries(condition, intervention)
+    expanded = expand_queries(condition, query)
 
     async with httpx.AsyncClient() as client:
-        # Retrieve in parallel (depth-first)
-        # --- BALANCED MULTI-QUERY RETRIEVAL (STABLE VERSION) ---
-        pub_per_query = max(1, settings.PUBMED_RETMAX // len(expanded["pubmed"]))
-        oa_per_query = max(1, settings.OPENALEX_PER_PAGE // len(expanded["openalex"]))
+        pubmed_q = expanded["pubmed"][0]
+        openalex_q = expanded["openalex"][0]
 
-        # Create tasks separately
-        pub_tasks = [
-            fetch_pubmed_candidates(
-                client,
-                q,
-                retmax=pub_per_query,
-                tool=settings.PUBMED_TOOL,
-                email=settings.PUBMED_EMAIL,
-            )
-            for q in expanded["pubmed"]
-        ]
+        pub_task = fetch_pubmed_candidates(
+            client,
+            pubmed_q,
+            retmax=settings.PUBMED_RETMAX,
+            tool=settings.PUBMED_TOOL,
+            email=settings.PUBMED_EMAIL,
+        )
 
-        oa_tasks = [
-            fetch_openalex_candidates(
-                client,
-                q,
-                per_page=oa_per_query,
-                mailto=settings.OPENALEX_MAILTO,
-            )
-            for q in expanded["openalex"]
-        ]
+        oa_task = fetch_openalex_candidates(
+            client,
+            openalex_q,
+            per_page=settings.OPENALEX_PER_PAGE,
+            mailto=settings.OPENALEX_MAILTO,
+        )
 
-        # Run separately to avoid mixing
-        pub_results = await asyncio.gather(*pub_tasks, return_exceptions=True)
-        oa_results = await asyncio.gather(*oa_tasks, return_exceptions=True)
+        results = await asyncio.gather(pub_task, oa_task, return_exceptions=True)
 
-        # Flatten safely
-        pubmed_candidates = [
-            item
-            for result in pub_results
-            if isinstance(result, list)
-            for item in result
-        ]
-
-        openalex_candidates = [
-            item
-            for result in oa_results
-            if isinstance(result, list)
-            for item in result
-        ]
-
+        pubmed_candidates = results[0] if isinstance(results[0], list) else []
+        openalex_candidates = results[1] if isinstance(results[1], list) else []
         trials_candidates: List[Dict[str, Any]] = []
 
     # Counts BEFORE dedupe
