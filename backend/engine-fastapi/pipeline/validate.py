@@ -1,6 +1,8 @@
 from typing import Any, Dict, List, Set
 
-def validate_brief_citations(brief: Dict[str, Any], valid_ids: Set[str]) -> Dict[str, Any]:
+def validate_brief_citations(brief: Dict[str, Any], valid_ids) -> Dict[str, Any]:
+    # ensure valid_ids is a set of strings
+    valid_ids = set(str(v) for v in valid_ids if isinstance(v, (str, int)))
     for key in ["conditionOverview", "researchInsights", "clinicalTrialsSummary"]:
         sec = brief.get(key) or {}
         cits = sec.get("citations") or []
