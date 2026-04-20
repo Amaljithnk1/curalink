@@ -64,10 +64,11 @@ async def run(req: RunRequest):
 
     async with httpx.AsyncClient() as client:
         # Retrieve in parallel (depth-first)
-        # --- BALANCED MULTI-QUERY RETRIEVAL ---
+        # --- BALANCED MULTI-QUERY RETRIEVAL (STABLE VERSION) ---
         pub_per_query = max(1, settings.PUBMED_RETMAX // len(expanded["pubmed"]))
         oa_per_query = max(1, settings.OPENALEX_PER_PAGE // len(expanded["openalex"]))
 
+        # Create tasks separately
         pub_tasks = [
             fetch_pubmed_candidates(
                 client,
@@ -89,17 +90,24 @@ async def run(req: RunRequest):
             for q in expanded["openalex"]
         ]
 
-        results = await asyncio.gather(*pub_tasks, *oa_tasks, return_exceptions=True)
+        # Run separately to avoid mixing
+        pub_results = await asyncio.gather(*pub_tasks, return_exceptions=True)
+        oa_results = await asyncio.gather(*oa_tasks, return_exceptions=True)
 
-        pubmed_candidates: List[Dict[str, Any]] = []
-        openalex_candidates: List[Dict[str, Any]] = []
+        # Flatten safely
+        pubmed_candidates = [
+            item
+            for result in pub_results
+            if isinstance(result, list)
+            for item in result
+        ]
 
-        for r in results:
-            if isinstance(r, list) and r:
-                if r[0].get("source") == "pubmed":
-                    pubmed_candidates.extend(r)
-                elif r[0].get("source") == "openalex":
-                    openalex_candidates.extend(r)
+        openalex_candidates = [
+            item
+            for result in oa_results
+            if isinstance(result, list)
+            for item in result
+        ]
 
         trials_candidates: List[Dict[str, Any]] = []
 
