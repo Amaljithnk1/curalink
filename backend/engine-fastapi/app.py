@@ -64,30 +64,40 @@ async def run(req: RunRequest):
 
     async with httpx.AsyncClient() as client:
         # Retrieve in parallel (depth-first)
-        pubmed_q = expanded["pubmed"][0]
-        openalex_q = expanded["openalex"][0]
-        q_lower = query.lower()
-        use_term = any(k in q_lower for k in ["trial", "trials", "treatment", "therapy", "drug", "supplement", "dbs", "deep brain"])
-        trials_term = expanded["trials_term"][0] if use_term else ""
+        # --- MULTI QUERY RETRIEVAL (REAL FIX) ---
+        pub_tasks = [
+            fetch_pubmed_candidates(
+                client,
+                q,
+                retmax=settings.PUBMED_RETMAX,
+                tool=settings.PUBMED_TOOL,
+                email=settings.PUBMED_EMAIL,
+            )
+            for q in expanded["pubmed"]
+        ]
 
-        pub_task = fetch_pubmed_candidates(
-            client,
-            pubmed_q,
-            retmax=settings.PUBMED_RETMAX,
-            tool=settings.PUBMED_TOOL,
-            email=settings.PUBMED_EMAIL,
-        )
-        oa_task = fetch_openalex_candidates(
-            client,
-            openalex_q,
-            per_page=settings.OPENALEX_PER_PAGE,
-            mailto=settings.OPENALEX_MAILTO,
-        )
-        tr_task = asyncio.sleep(0)  # trials handled client-side
+        oa_tasks = [
+            fetch_openalex_candidates(
+                client,
+                q,
+                per_page=settings.OPENALEX_PER_PAGE,
+                mailto=settings.OPENALEX_MAILTO,
+            )
+            for q in expanded["openalex"]
+        ]
 
-        results = await asyncio.gather(pub_task, oa_task, tr_task, return_exceptions=True)
-        pubmed_candidates = results[0] if isinstance(results[0], list) else []
-        openalex_candidates = results[1] if isinstance(results[1], list) else []
+        results = await asyncio.gather(*pub_tasks, *oa_tasks, return_exceptions=True)
+
+        pubmed_candidates: List[Dict[str, Any]] = []
+        openalex_candidates: List[Dict[str, Any]] = []
+
+        for r in results:
+            if isinstance(r, list) and r:
+                if r[0].get("source") == "pubmed":
+                    pubmed_candidates.extend(r)
+                else:
+                    openalex_candidates.extend(r)
+
         trials_candidates: List[Dict[str, Any]] = []
 
     # Counts BEFORE dedupe
