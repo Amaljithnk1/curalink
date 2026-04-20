@@ -3,12 +3,20 @@ import re
 from typing import Any, Dict, List
 from groq import Groq
 
-SYSTEM = """You are CuraLink, a medical research synthesis engine.
-You must ONLY use the provided evidence items.
+SYSTEM = """You are CuraLink, a medical research synthesis engine answering a patient's specific question.
+You must ONLY use the provided evidence items for citations.
 You MUST cite using provided citationIds exactly (e.g., P1, P2, T1).
 Return STRICT JSON with keys: conditionOverview, researchInsights, clinicalTrialsSummary.
 Each section must include: title, content, citations (array), confidence (strong|moderate|emerging).
-Do NOT invent citations. Do NOT cite anything not provided.
+
+CRITICAL RULES:
+- The patient asked a SPECIFIC question. Answer THAT question directly in every section.
+- conditionOverview: Explain what is known about the specific topic (e.g. sunlight, vitamin D) in relation to the condition.
+- researchInsights: Give specific findings about the topic as it relates to the condition. Be direct and useful.
+- clinicalTrialsSummary: Mention any relevant trials or say what is known about clinical evidence for this topic.
+- If papers don't directly cover the topic, use related evidence to give the best possible answer and note the limitation.
+- Do NOT just summarize the condition generally. The patient already knows they have the condition.
+- Do NOT invent citations. Do NOT cite anything not provided.
 """
 
 class GroqProvider:
@@ -30,26 +38,28 @@ class GroqProvider:
             prior_context = ""
             if previous_queries:
                 prior_context = f"""
-This is a follow-up question. The patient's previous questions were:
+Prior questions in this session:
 {chr(10).join(f'- "{q}"' for q in previous_queries)}
-
-Always answer in the context of {condition}. The current question "{query}" is specifically about {condition}.
 """
 
-            user = f"""The patient has condition: {condition}
-Their specific question is: "{query}"
+            user = f"""Patient condition: {condition}
+Current question: "{query}"
 Location: {location or 'not specified'}
 {prior_context}
-DIRECTLY answer their question "{query}" in the context of {condition} using ONLY the evidence below.
-Do not just summarize papers. Answer what they actually asked about {condition}.
-If they ask about a supplement or drug, say whether it is safe or beneficial specifically for {condition} patients based on the evidence.
-If they ask about treatments, give specific treatment insights for {condition}.
-If the question seems generic or short (e.g. "is it good"), interpret it as asking about the previously discussed topic in relation to {condition}.
+YOUR JOB: Answer "{query}" specifically for a {condition} patient.
 
-Evidence:
+Rules:
+- Every section title must reference "{query}" and "{condition}" together (e.g. "Sunlight Exposure and Parkinson's Disease")
+- conditionOverview: What do we know about {query} in the context of {condition}? Benefits, risks, mechanisms.
+- researchInsights: Specific research findings about {query} for {condition} patients. If papers don't directly cover it, use the closest related evidence and say so.
+- clinicalTrialsSummary: Any trials or clinical evidence about {query} for {condition}.
+- Be specific and useful. The patient wants to know if/how "{query}" affects their {condition}.
+- Do NOT write a generic overview of {condition}. Focus on "{query}".
+
+Evidence (cite only these):
 {json.dumps(evidence, indent=2)}
 
-Return ONLY valid JSON. No markdown."""
+Return ONLY valid JSON matching the schema. No markdown, no explanation."""
 
             resp = self.client.chat.completions.create(
                 model=self.model,
