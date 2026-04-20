@@ -87,7 +87,8 @@ class Revision(BaseModel):
     timestamp: int
 
 class RunRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
     query: str
     context: PatientContext
     revisionId: Optional[str] = None
+    previousQueries: Optional[List[str]] = None

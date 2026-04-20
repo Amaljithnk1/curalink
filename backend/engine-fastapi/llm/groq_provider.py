@@ -16,7 +16,7 @@ class GroqProvider:
         self.client = Groq(api_key=api_key)
         self.model = model
 
-    def generate_brief(self, condition: str, query: str, location: str | None, papers: List[Dict[str, Any]], trials: List[Dict[str, Any]]) -> Dict[str, Any] | None:
+    def generate_brief(self, condition: str, query: str, location: str | None, papers: List[Dict[str, Any]], trials: List[Dict[str, Any]], previous_queries: List[str] | None = None) -> Dict[str, Any] | None:
         try:
             evidence = {
                 "condition": condition,
@@ -26,14 +26,25 @@ class GroqProvider:
                 "trials": [{k: t.get(k) for k in ["citationId","title","nctId","status","locations","eligibility","contact","url"]} for t in trials],
             }
 
+            # Build conversation context for follow-up questions
+            prior_context = ""
+            if previous_queries:
+                prior_context = f"""
+This is a follow-up question. The patient's previous questions were:
+{chr(10).join(f'- "{q}"' for q in previous_queries)}
+
+Always answer in the context of {condition}. The current question "{query}" is specifically about {condition}.
+"""
+
             user = f"""The patient has condition: {condition}
 Their specific question is: "{query}"
 Location: {location or 'not specified'}
-
-DIRECTLY answer their question "{query}" using ONLY the evidence below.
-Do not just summarize papers. Answer what they actually asked.
-If they ask about a supplement or drug, say whether it is safe or beneficial for {condition} patients based on the evidence.
+{prior_context}
+DIRECTLY answer their question "{query}" in the context of {condition} using ONLY the evidence below.
+Do not just summarize papers. Answer what they actually asked about {condition}.
+If they ask about a supplement or drug, say whether it is safe or beneficial specifically for {condition} patients based on the evidence.
 If they ask about treatments, give specific treatment insights for {condition}.
+If the question seems generic or short (e.g. "is it good"), interpret it as asking about the previously discussed topic in relation to {condition}.
 
 Evidence:
 {json.dumps(evidence, indent=2)}

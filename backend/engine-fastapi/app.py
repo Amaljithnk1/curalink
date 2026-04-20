@@ -54,8 +54,9 @@ async def run(req: RunRequest):
     condition = req.context.condition.strip()
     location = (req.context.location or "").strip() or None
     query = req.query.strip()
+    previous_queries = req.previousQueries or []
 
-    expanded = expand_queries(condition, query)
+    expanded = expand_queries(condition, query, previous_queries if previous_queries else None)
 
     async with httpx.AsyncClient() as client:
         pubmed_q = expanded["pubmed"][0]
@@ -114,7 +115,7 @@ async def run(req: RunRequest):
     if settings.USE_GROQ and settings.GROQ_API_KEY:
         from llm.groq_provider import GroqProvider
         provider = GroqProvider(api_key=settings.GROQ_API_KEY, model=settings.GROQ_MODEL)
-        llm_brief = provider.generate_brief(condition, query, location, top_pubs, top_trs)
+        llm_brief = provider.generate_brief(condition, query, location, top_pubs, top_trs, previous_queries=previous_queries)
         print(f"GROQ RESULT: {llm_brief is not None}, model: {settings.GROQ_MODEL}")
         if llm_brief:
             brief = llm_brief

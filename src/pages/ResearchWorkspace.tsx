@@ -873,7 +873,12 @@ export default function ResearchWorkspace() {
       const res = await fetch(`${import.meta.env.VITE_API_URL}/api/research/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, query: q, context: { ...context, condition: conditionToCheck } }),
+        body: JSON.stringify({
+          sessionId,
+          query: q,
+          context: { ...context, condition: conditionToCheck },
+          previousQueries: revisions.map(r => r.query),
+        }),
       });
       if (!res.ok) {
         if (res.status === 400) {

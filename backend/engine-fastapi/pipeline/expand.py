@@ -1,28 +1,40 @@
-from typing import Dict, List
+from typing import Dict, List, Optional
 from core.utils import normalize_whitespace
 
 
-def expand_queries(condition: str, query: str) -> Dict[str, List[str]]:
+def expand_queries(
+    condition: str,
+    query: str,
+    previous_queries: Optional[List[str]] = None,
+) -> Dict[str, List[str]]:
     """
     Returns per-source query strings.
-    Deterministic expansion to keep pipeline stable.
+    When previous_queries are provided, the current query is treated as a
+    follow-up and anchored to the condition + prior context.
     """
     condition = normalize_whitespace(condition)
     query = normalize_whitespace(query)
 
-    base = f"{condition} {query}".strip()
+    # Build an enriched query that always includes the condition
+    if previous_queries:
+        # Combine condition with the current follow-up query
+        enriched = f"{condition} {query}".strip()
+    else:
+        enriched = query
+
+    base = f"{condition} {enriched}".strip() if not previous_queries else enriched
+
     pubmed = [
-        f"{condition} AND ({query})",
-        f"{condition} AND ({query}) AND (trial OR randomized OR meta-analysis OR systematic review)",
+        f"{condition} AND ({enriched})",
+        f"{condition} AND ({enriched}) AND (trial OR randomized OR meta-analysis OR systematic review)",
         base,
     ]
     openalex = [
         base,
-        f"{condition} {query} systematic review",
-        f"{condition} {query} clinical trial",
+        f"{condition} {enriched} systematic review",
+        f"{condition} {enriched} clinical trial",
     ]
-    # Trials: use condition + intervention-ish query term
-    trials_term = query
+    trials_term = enriched
 
     return {
         "pubmed": pubmed,
