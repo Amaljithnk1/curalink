@@ -118,6 +118,7 @@ async def run(req: RunRequest):
         from llm.groq_provider import GroqProvider
         provider = GroqProvider(api_key=settings.GROQ_API_KEY, model=settings.GROQ_MODEL)
         llm_brief = provider.generate_brief(condition, query, location, top_pubs, top_trs)
+        print(f"GROQ RESULT: {llm_brief is not None}, model: {settings.GROQ_MODEL}")
         if llm_brief:
             brief = llm_brief
             brief = validate_brief_citations(brief, valid_ids)
