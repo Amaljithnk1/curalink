@@ -12,7 +12,7 @@ Do NOT invent citations. Do NOT cite anything not provided.
 """
 
 class GroqProvider:
-    def __init__(self, api_key: str, model: str = "llama3-8b-8192"):
+    def __init__(self, api_key: str, model: str = "llama-3.1-8b-instant"):
         self.client = Groq(api_key=api_key)
         self.model = model
 
@@ -26,7 +26,20 @@ class GroqProvider:
                 "trials": [{k: t.get(k) for k in ["citationId","title","nctId","status","locations","eligibility","contact","url"]} for t in trials],
             }
 
-            user = f"Create a structured brief for:\n{evidence}\nReturn JSON only."
+            user = f"""The patient has condition: {condition}
+Their specific question is: "{query}"
+Location: {location or 'not specified'}
+
+DIRECTLY answer their question "{query}" using ONLY the evidence below.
+Do not just summarize papers. Answer what they actually asked.
+If they ask about a supplement or drug, say whether it is safe or beneficial for {condition} patients based on the evidence.
+If they ask about treatments, give specific treatment insights for {condition}.
+
+Evidence:
+{json.dumps(evidence, indent=2)}
+
+Return ONLY valid JSON. No markdown."""
+
             resp = self.client.chat.completions.create(
                 model=self.model,
                 temperature=0.2,
