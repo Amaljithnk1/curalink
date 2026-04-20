@@ -52,6 +52,11 @@ export default function FirstRunPage() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d')!;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const navigatorWithMemory = navigator as Navigator & { deviceMemory?: number };
+    const isLowPowerDevice =
+      (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4) ||
+      (navigatorWithMemory.deviceMemory !== undefined && navigatorWithMemory.deviceMemory <= 4);
 
     type Particle = {
       x: number; y: number;
@@ -64,6 +69,17 @@ export default function FirstRunPage() {
 
     let W = 0, H = 0;
     let particles: Particle[] = [];
+    const linkDistance = isLowPowerDevice ? 42 : 54;
+    const linkDistanceSq = linkDistance * linkDistance;
+    const maxConnectionsPerParticle = isLowPowerDevice ? 2 : 3;
+
+    function getParticleCount() {
+      if (reduceMotion) return 0;
+      const areaScaledCount = Math.round((W * H) / 9000);
+      const minCount = isLowPowerDevice ? 70 : 110;
+      const maxCount = isLowPowerDevice ? 130 : 220;
+      return Math.max(minCount, Math.min(maxCount, areaScaledCount));
+    }
 
     function resize() {
       W = canvas!.width = canvas!.offsetWidth;
@@ -73,8 +89,7 @@ export default function FirstRunPage() {
 
     function init() {
       particles = [];
-      // More particles, more variety
-      for (let i = 0; i < 380; i++) {
+      for (let i = 0; i < getParticleCount(); i++) {
         const roll = Math.random();
         const baseOp = Math.random() * 0.55 + 0.18;
         particles.push({
@@ -93,7 +108,7 @@ export default function FirstRunPage() {
 
     function draw() {
       ctx.clearRect(0, 0, W, H);
-      const t = Date.now() / 1000;
+      const t = performance.now() / 1000;
 
       // Flowing blobs — richer, more prominent
       const blobs = [
@@ -119,12 +134,16 @@ export default function FirstRunPage() {
         p.opacity = p.baseOpacity + Math.sin(t * 1.2 + p.pulseOffset) * 0.12;
 
         // Mouse repulsion — stronger radius
-        const dx = p.x - mx, dy = p.y - my;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < 180 && dist > 0) {
-          const force = (180 - dist) / 180;
-          p.vx += (dx / dist) * force * 0.8;
-          p.vy += (dy / dist) * force * 0.8;
+        if (mx > -998) {
+          const dx = p.x - mx;
+          const dy = p.y - my;
+          const distSq = dx * dx + dy * dy;
+          if (distSq < 180 * 180 && distSq > 1) {
+            const dist = Math.sqrt(distSq);
+            const force = (180 - dist) / 180;
+            p.vx += (dx / dist) * force * 0.8;
+            p.vy += (dy / dist) * force * 0.8;
+          }
         }
 
         p.vx *= 0.965;
@@ -149,17 +168,21 @@ export default function FirstRunPage() {
         ctx.fill();
 
         // Connection lines — longer reach
-        for (let j = i + 1; j < particles.length; j++) {
+        let connections = 0;
+        for (let j = i + 1; j < particles.length && connections < maxConnectionsPerParticle; j++) {
           const q = particles[j];
-          const ex = p.x - q.x, ey = p.y - q.y;
-          const ed = Math.sqrt(ex * ex + ey * ey);
-          if (ed < 60) {
+          const ex = p.x - q.x;
+          const ey = p.y - q.y;
+          const distSq = ex * ex + ey * ey;
+          if (distSq < linkDistanceSq) {
+            const ed = Math.sqrt(distSq);
             ctx.beginPath();
             ctx.moveTo(p.x, p.y);
             ctx.lineTo(q.x, q.y);
-            ctx.strokeStyle = `rgba(107,29,42,${0.10 * (1 - ed / 90)})`;
+            ctx.strokeStyle = `rgba(107,29,42,${0.1 * (1 - ed / (linkDistance * 1.5))})`;
             ctx.lineWidth = 0.6;
             ctx.stroke();
+            connections++;
           }
         }
       });
@@ -250,7 +273,7 @@ export default function FirstRunPage() {
   return (
     <div
       className="min-h-screen relative overflow-hidden"
-      style={{ background: '#FFFDF7' }}
+      style={{ background: 'radial-gradient(circle at 20% 15%, #fff8ee 0%, #f8efe1 42%, #f2e5d4 100%)' }}
       onMouseMove={(e) => {
         const rect = e.currentTarget.getBoundingClientRect();
         mouseRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
@@ -258,6 +281,27 @@ export default function FirstRunPage() {
       onMouseLeave={() => { mouseRef.current = { x: -999, y: -999 }; }}
     >
       <PaperGrain />
+
+      {/* Ambient color glows (cheap CSS animation, no canvas cost) */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            'radial-gradient(46rem 46rem at 14% 16%, rgba(107,29,42,0.2), transparent 62%), radial-gradient(38rem 38rem at 84% 16%, rgba(91,122,94,0.16), transparent 58%), radial-gradient(34rem 34rem at 72% 84%, rgba(184,134,11,0.13), transparent 56%)',
+          filter: 'blur(4px)',
+          zIndex: 0,
+          animation: 'auraDrift 10s ease-in-out infinite alternate',
+        }}
+      />
+
+      {/* Soft vignette for depth */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: 'radial-gradient(circle at center, transparent 35%, rgba(49,20,12,0.14) 100%)',
+          zIndex: 0,
+        }}
+      />
 
       {/* Paper grain overlay */}
       <div
@@ -267,7 +311,7 @@ export default function FirstRunPage() {
           backgroundRepeat: 'repeat',
           backgroundSize: '128px 128px',
           mixBlendMode: 'multiply',
-          opacity: 0.6,
+          opacity: 0.34,
           zIndex: 1,
         }}
       />
@@ -277,8 +321,8 @@ export default function FirstRunPage() {
         className="absolute inset-0 pointer-events-none"
         style={{
           backgroundImage: `
-            linear-gradient(rgba(107,29,42,0.022) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(107,29,42,0.022) 1px, transparent 1px)
+            linear-gradient(rgba(107,29,42,0.015) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(107,29,42,0.015) 1px, transparent 1px)
           `,
           backgroundSize: '60px 60px',
           zIndex: 1,
@@ -289,11 +333,15 @@ export default function FirstRunPage() {
       <canvas
         ref={canvasRef}
         className="absolute inset-0 w-full h-full"
-        style={{ pointerEvents: 'none', zIndex: 2 }}
+        style={{ pointerEvents: 'none', zIndex: 2, opacity: 0.82 }}
       />
 
       {/* CSS for ink ring animation */}
       <style>{`
+        @keyframes auraDrift {
+          0% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.8; }
+          100% { transform: translate3d(-1.2%, 1.8%, 0) scale(1.04); opacity: 1; }
+        }
         @keyframes inkRingExpand {
           0%   { opacity: 0; transform: translate(-50%,-50%) scale(0.1); }
           20%  { opacity: 1; }
@@ -316,31 +364,70 @@ export default function FirstRunPage() {
           from { transform: rotate(0deg); }
           to   { transform: rotate(-360deg); }
         }
+        @keyframes logoBreathe {
+          0% { transform: translateY(0px); }
+          50% { transform: translateY(-1px); }
+          100% { transform: translateY(0px); }
+        }
+        @keyframes ctaShimmer {
+          0% { transform: translateX(-180%) skewX(-16deg); opacity: 0; }
+          35% { opacity: 0.55; }
+          100% { transform: translateX(220%) skewX(-16deg); opacity: 0; }
+        }
         .ink-reveal {
           animation: inkSettle 1.1s cubic-bezier(0.19,1,0.22,1) forwards;
           opacity: 0;
         }
+        .logo-breathe {
+          animation: logoBreathe 4.2s ease-in-out infinite;
+        }
+        .cta-shimmer::after {
+          content: '';
+          position: absolute;
+          inset: -2px;
+          width: 34%;
+          background: linear-gradient(90deg, transparent, rgba(255,255,255,0.65), transparent);
+          animation: ctaShimmer 2.8s ease-in-out infinite;
+          pointer-events: none;
+        }
         @media (prefers-reduced-motion: reduce) {
           .ink-reveal { animation: none; opacity: 1; }
+          .logo-breathe { animation: none; }
+          .cta-shimmer::after { animation: none; opacity: 0; }
           @keyframes inkRingExpand { 100% { opacity: 0; } }
         }
       `}</style>
 
       {/* Content */}
-      <div className="relative z-10 min-h-screen flex flex-col items-center justify-center px-4 py-16">
+      <div className="relative z-10 min-h-screen flex flex-col items-center justify-center px-4 py-10 md:py-14">
+        <div
+          className="pointer-events-none absolute inset-x-0 top-[9%] h-72"
+          style={{
+            background:
+              'radial-gradient(ellipse at center, rgba(107,29,42,0.22) 0%, rgba(107,29,42,0.08) 30%, rgba(107,29,42,0) 72%)',
+            filter: 'blur(6px)',
+          }}
+        />
+        <div
+          className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 h-[58vh] w-[1px]"
+          style={{
+            boxShadow: '0 0 90px 38px rgba(107,29,42,0.24)',
+            opacity: 0.55,
+          }}
+        />
 
         {/* Logo mark with ink bloom */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.3 }}
-          className="mb-6"
-          style={{ position: 'relative', width: 56, height: 56 }}
+          className="mb-6 logo-breathe"
+          style={{ position: 'relative', width: 64, height: 64 }}
         >
           {/* Ink bloom pulse — expands outward */}
           <div style={{
             position: 'absolute',
-            width: 56, height: 56,
+            width: 64, height: 64,
             borderRadius: '50%',
             background: 'rgba(107,29,42,0.18)',
             top: '50%', left: '50%',
@@ -357,9 +444,9 @@ export default function FirstRunPage() {
           {/* Outer slow orbit ring */}
           <div style={{
             position: 'absolute',
-            width: 72, height: 72,
+            width: 84, height: 84,
             borderRadius: '50%',
-            border: '1px dashed rgba(107,29,42,0.10)',
+            border: '1px dashed rgba(107,29,42,0.14)',
             top: '50%', left: '50%',
             transform: 'translate(-50%,-50%)',
             animation: 'rotateSlow 18s linear infinite',
@@ -367,10 +454,10 @@ export default function FirstRunPage() {
             {/* Orbiting dot */}
             <div style={{
               position: 'absolute',
-              width: 4, height: 4,
+              width: 5, height: 5,
               borderRadius: '50%',
-              background: 'rgba(107,29,42,0.35)',
-              top: -2, left: '50%',
+              background: 'rgba(107,29,42,0.5)',
+              top: -2.5, left: '50%',
               transform: 'translateX(-50%)',
             }} />
           </div>
@@ -378,19 +465,19 @@ export default function FirstRunPage() {
           {/* Inner counter-orbit */}
           <div style={{
             position: 'absolute',
-            width: 52, height: 52,
+            width: 62, height: 62,
             borderRadius: '50%',
-            border: '1px dashed rgba(107,29,42,0.07)',
+            border: '1px dashed rgba(107,29,42,0.11)',
             top: '50%', left: '50%',
             transform: 'translate(-50%,-50%)',
             animation: 'rotateSlowReverse 12s linear infinite',
           }}>
             <div style={{
               position: 'absolute',
-              width: 3, height: 3,
+              width: 4, height: 4,
               borderRadius: '50%',
-              background: 'rgba(91,122,94,0.45)',
-              bottom: -1.5, left: '50%',
+              background: 'rgba(91,122,94,0.58)',
+              bottom: -2, left: '50%',
               transform: 'translateX(-50%)',
             }} />
           </div>
@@ -401,18 +488,19 @@ export default function FirstRunPage() {
             style={{
               animationDelay: '0.2s',
               position: 'absolute',
-              width: 56, height: 56,
+              width: 64, height: 64,
               top: 0, left: 0,
-              borderRadius: 14,
+              borderRadius: 16,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              background: 'rgba(107,29,42,0.06)',
-              border: '1px solid rgba(107,29,42,0.10)',
-              backdropFilter: 'blur(12px)',
+              background: 'rgba(107,29,42,0.08)',
+              border: '1px solid rgba(107,29,42,0.14)',
+              boxShadow: '0 8px 20px rgba(107,29,42,0.12)',
+              backdropFilter: 'blur(13px)',
             }}
           >
-            <span className="font-serif text-2xl font-bold" style={{ color: 'rgba(107,29,42,0.75)' }}>C</span>
+            <span className="font-serif text-[30px] font-bold" style={{ color: 'rgba(107,29,42,0.82)' }}>C</span>
           </div>
         </motion.div>
 
@@ -423,7 +511,13 @@ export default function FirstRunPage() {
         >
           <h1
             className="font-serif leading-none font-bold tracking-tight"
-            style={{ fontSize: '4rem', color: '#6B1D2A' }}
+            style={{
+              fontSize: '4.25rem',
+              background: 'linear-gradient(180deg, #7f2133 0%, #5d1725 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              textShadow: '0 10px 28px rgba(107,29,42,0.2)',
+            }}
           >
             CuraLink
           </h1>
@@ -434,7 +528,7 @@ export default function FirstRunPage() {
           className="ink-reveal text-center mb-1"
           style={{ animationDelay: '0.65s' }}
         >
-          <p className="font-serif text-lg italic" style={{ color: 'rgba(107,29,42,0.45)' }}>
+          <p className="font-serif text-[1.15rem] italic" style={{ color: 'rgba(84,24,35,0.92)' }}>
             Research-grade evidence, curated for your condition.
           </p>
         </div>
@@ -443,37 +537,46 @@ export default function FirstRunPage() {
           className="ink-reveal text-center mb-10"
           style={{ animationDelay: '0.8s' }}
         >
-          <p className="text-xs font-sans tracking-wide" style={{ color: 'rgba(26,26,26,0.28)' }}>
+          <p className="text-xs font-sans tracking-wide" style={{ color: 'rgba(26,26,26,0.56)' }}>
             Bridging the gap between academic depth and patient experience.
           </p>
         </div>
 
         {/* Main card */}
-        <div
-          className="ink-reveal w-full max-w-md"
+        <motion.div
+          className="ink-reveal w-full max-w-[30rem]"
           style={{ animationDelay: '0.95s' }}
+          initial={{ y: 10, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.9, duration: 0.7 }}
         >
           <div
-            className="rounded-[16px] p-8"
+            className="rounded-[18px] p-8 relative overflow-hidden"
             style={{
-              background: 'rgba(255,255,255,0.92)',
-              backdropFilter: 'blur(28px)',
-              boxShadow: '0 20px 50px -12px rgba(107,29,42,0.10), 0 0 0 1px rgba(255,255,255,0.8)',
-              border: '1px solid rgba(255,255,255,0.9)',
+              background: 'rgba(255,252,247,0.82)',
+              backdropFilter: 'blur(22px)',
+              boxShadow: '0 26px 60px -24px rgba(0,0,0,0.16), 0 0 0 1px rgba(255,255,255,0.95)',
+              border: '1px solid rgba(255,255,255,0.97)',
             }}
           >
+            <div
+              className="pointer-events-none absolute inset-x-0 top-0 h-14"
+              style={{
+                background: 'linear-gradient(180deg, rgba(255,255,255,0.8), rgba(255,255,255,0))',
+              }}
+            />
             <div className="flex items-center gap-3 mb-7">
               <div className="h-px flex-1" style={{ background: 'linear-gradient(90deg, rgba(107,29,42,0.18), transparent)' }} />
-              <span className="text-[9px] font-mono uppercase tracking-[0.25em] font-medium" style={{ color: 'rgba(107,29,42,0.35)' }}>
+              <span className="text-[9px] font-mono uppercase tracking-[0.25em] font-medium" style={{ color: 'rgba(107,29,42,0.48)' }}>
                 Clinical Context
               </span>
               <div className="h-px flex-1" style={{ background: 'linear-gradient(270deg, rgba(107,29,42,0.18), transparent)' }} />
             </div>
 
             {/* Condition */}
-            <div className="mb-5">
+            <div className="mb-6">
               <label className="flex items-baseline gap-1.5 mb-2">
-                <span className="text-[13px] font-serif italic font-medium" style={{ color: '#6B1D2A' }}>Condition</span>
+                <span className="text-[14px] font-serif italic font-semibold" style={{ color: '#6B1D2A' }}>Condition</span>
                 <span className="text-xs" style={{ color: '#6B1D2A' }}>*</span>
               </label>
               <input
@@ -483,17 +586,17 @@ export default function FirstRunPage() {
                 onKeyDown={(e) => e.key === 'Enter' && handleStartResearch()}
                 placeholder="e.g. Parkinson's disease, Lung Cancer"
                 className="w-full px-4 py-3 rounded-xl text-sm font-sans transition-all duration-300"
-                style={{ background: 'rgba(255,253,247,0.8)', border: '1px solid rgba(107,29,42,0.08)', color: '#1a1a1a', outline: 'none' }}
-                onFocus={e => { e.target.style.boxShadow = '0 0 0 3px rgba(107,29,42,0.10)'; e.target.style.borderColor = 'rgba(107,29,42,0.22)'; e.target.style.background = '#fff'; }}
-                onBlur={e => { e.target.style.boxShadow = 'none'; e.target.style.borderColor = 'rgba(107,29,42,0.08)'; e.target.style.background = 'rgba(255,253,247,0.8)'; }}
+                style={{ background: '#fff', border: '1px solid rgba(107,29,42,0.24)', color: '#1a1a1a', outline: 'none', boxShadow: '0 2px 8px rgba(107,29,42,0.05)' }}
+                onFocus={e => { e.target.style.boxShadow = '0 0 0 3px rgba(107,29,42,0.12)'; e.target.style.borderColor = 'rgba(107,29,42,0.28)'; }}
+                onBlur={e => { e.target.style.boxShadow = '0 2px 8px rgba(107,29,42,0.05)'; e.target.style.borderColor = 'rgba(107,29,42,0.24)'; }}
               />
             </div>
 
             {/* Location */}
             <div className="mb-5">
               <label className="flex items-baseline gap-2 mb-2">
-                <span className="text-[13px] font-serif italic font-medium" style={{ color: '#6B1D2A' }}>Location</span>
-                <span className="text-[9px] font-mono tracking-wide" style={{ color: 'rgba(107,29,42,0.4)' }}>(for trial matching)</span>
+                <span className="text-[13px] font-serif italic font-medium" style={{ color: 'rgba(107,29,42,0.72)' }}>Location</span>
+                <span className="text-[9px] font-mono tracking-wide" style={{ color: 'rgba(107,29,42,0.5)' }}>(optional)</span>
               </label>
               <input
                 type="text"
@@ -501,7 +604,7 @@ export default function FirstRunPage() {
                 onChange={(e) => setLocation(e.target.value)}
                 placeholder="e.g. Toronto, Canada"
                 className="w-full px-4 py-3 rounded-xl text-sm font-sans transition-all duration-300"
-                style={{ background: 'rgba(255,253,247,0.8)', border: '1px solid rgba(107,29,42,0.08)', color: '#1a1a1a', outline: 'none' }}
+                style={{ background: 'rgba(255,253,247,0.74)', border: '1px solid rgba(107,29,42,0.07)', color: '#1a1a1a', outline: 'none' }}
                 onFocus={e => { e.target.style.boxShadow = '0 0 0 3px rgba(107,29,42,0.10)'; e.target.style.borderColor = 'rgba(107,29,42,0.22)'; e.target.style.background = '#fff'; }}
                 onBlur={e => { e.target.style.boxShadow = 'none'; e.target.style.borderColor = 'rgba(107,29,42,0.08)'; e.target.style.background = 'rgba(255,253,247,0.8)'; }}
               />
@@ -510,8 +613,8 @@ export default function FirstRunPage() {
             {/* Medications */}
             <div className="mb-7">
               <label className="flex items-baseline gap-2 mb-2">
-                <span className="text-[13px] font-serif italic font-medium" style={{ color: '#6B1D2A' }}>Medications</span>
-                <span className="text-[9px] font-mono tracking-wide" style={{ color: 'rgba(107,29,42,0.4)' }}>(press Enter to add)</span>
+                <span className="text-[13px] font-serif italic font-medium" style={{ color: 'rgba(107,29,42,0.72)' }}>Medications</span>
+                <span className="text-[9px] font-mono tracking-wide" style={{ color: 'rgba(107,29,42,0.5)' }}>(optional)</span>
               </label>
               <AnimatePresence>
                 {medications.length > 0 && (
@@ -547,7 +650,7 @@ export default function FirstRunPage() {
                 onKeyDown={handleAddMedication}
                 placeholder="+ Add medication"
                 className="w-full px-4 py-3 rounded-xl text-sm font-sans transition-all duration-300"
-                style={{ background: 'rgba(255,253,247,0.8)', border: '1px solid rgba(107,29,42,0.08)', color: '#1a1a1a', outline: 'none' }}
+                style={{ background: 'rgba(255,253,247,0.74)', border: '1px solid rgba(107,29,42,0.07)', color: '#1a1a1a', outline: 'none' }}
                 onFocus={e => { e.target.style.boxShadow = '0 0 0 3px rgba(107,29,42,0.10)'; e.target.style.borderColor = 'rgba(107,29,42,0.22)'; e.target.style.background = '#fff'; }}
                 onBlur={e => { e.target.style.boxShadow = 'none'; e.target.style.borderColor = 'rgba(107,29,42,0.08)'; e.target.style.background = 'rgba(255,253,247,0.8)'; }}
               />
@@ -559,23 +662,32 @@ export default function FirstRunPage() {
               whileTap={condition.trim() ? { scale: 0.98 } : undefined}
               onClick={handleStartResearch}
               disabled={!condition.trim()}
-              className="w-full py-3.5 rounded-xl font-sans font-medium text-sm tracking-wide transition-all duration-300"
+              className="w-full py-3.5 rounded-xl font-sans font-medium text-sm tracking-wide transition-all duration-300 relative overflow-hidden cta-shimmer"
               style={{
-                background: condition.trim() ? 'linear-gradient(135deg, #6B1D2A 0%, #8B2E3D 100%)' : 'rgba(107,29,42,0.15)',
+                background: condition.trim() ? 'linear-gradient(135deg, #6B1D2A 0%, #8B2E3D 100%)' : 'rgba(107,29,42,0.2)',
                 color: condition.trim() ? 'white' : 'rgba(107,29,42,0.35)',
-                boxShadow: condition.trim() ? '0 8px 24px rgba(107,29,42,0.25)' : 'none',
+                boxShadow: condition.trim() ? '0 14px 34px rgba(107,29,42,0.35)' : 'none',
                 cursor: condition.trim() ? 'pointer' : 'not-allowed',
                 border: 'none',
+                letterSpacing: '0.01em',
               }}
             >
-              Start Research →
+              Generate Research Brief →
             </motion.button>
           </div>
-        </div>
+          <div
+            className="pointer-events-none mx-auto mt-3 h-6 w-[78%]"
+            style={{
+              background: 'radial-gradient(ellipse at center, rgba(64,22,31,0.35), rgba(64,22,31,0))',
+              filter: 'blur(8px)',
+              opacity: 0.45,
+            }}
+          />
+        </motion.div>
 
         {/* Divider */}
         <div
-          className="ink-reveal flex items-center gap-4 my-8 w-full max-w-md"
+          className="ink-reveal flex items-center gap-4 mt-7 mb-6 w-full max-w-[30rem]"
           style={{ animationDelay: '1.1s' }}
         >
           <div className="flex-1 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(107,29,42,0.1), transparent)' }} />
@@ -585,7 +697,7 @@ export default function FirstRunPage() {
 
         {/* Spotlight */}
         <div
-          className="ink-reveal w-full max-w-md mb-8"
+          className="ink-reveal w-full max-w-[30rem] mb-7"
           style={{ animationDelay: '1.2s' }}
         >
           <form onSubmit={handleSpotlightSubmit}>
@@ -640,7 +752,7 @@ export default function FirstRunPage() {
 
         {/* Source badges */}
         <div
-          className="ink-reveal flex items-center justify-center gap-6 mb-8"
+          className="ink-reveal flex items-center justify-center gap-6 mb-6"
           style={{ animationDelay: '1.3s' }}
         >
           {[
@@ -650,14 +762,14 @@ export default function FirstRunPage() {
           ].map((source) => (
             <div key={source.name} className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: source.color, opacity: 0.45 }} />
-              <span className="text-[10px] font-mono tracking-wide" style={{ color: 'rgba(26,26,26,0.22)' }}>{source.name}</span>
+              <span className="text-[10px] font-mono tracking-wide" style={{ color: 'rgba(26,26,26,0.32)' }}>{source.name}</span>
             </div>
           ))}
         </div>
 
         {/* Quick starts */}
         <div
-          className="ink-reveal flex flex-wrap justify-center gap-2 mb-12"
+          className="ink-reveal flex flex-wrap justify-center gap-2 mb-10"
           style={{ animationDelay: '1.4s' }}
         >
           {quickStarts.map((q, idx) => (
@@ -679,7 +791,7 @@ export default function FirstRunPage() {
                 navigate('/research', { state: { initialQuery: q.query } });
               }}
               className="px-4 py-2 text-[11px] font-sans rounded-full transition-all duration-200"
-              style={{ background: 'rgba(255,255,255,0.75)', backdropFilter: 'blur(12px)', border: '1px solid rgba(107,29,42,0.09)', color: 'rgba(107,29,42,0.65)', cursor: 'pointer' }}
+              style={{ background: 'rgba(255,255,255,0.65)', backdropFilter: 'blur(10px)', border: '1px solid rgba(107,29,42,0.08)', color: 'rgba(107,29,42,0.58)', cursor: 'pointer' }}
               onMouseOver={e => { e.currentTarget.style.color = '#6B1D2A'; e.currentTarget.style.borderColor = 'rgba(107,29,42,0.20)'; e.currentTarget.style.background = 'rgba(255,255,255,0.95)'; }}
               onMouseOut={e => { e.currentTarget.style.color = 'rgba(107,29,42,0.65)'; e.currentTarget.style.borderColor = 'rgba(107,29,42,0.09)'; e.currentTarget.style.background = 'rgba(255,255,255,0.75)'; }}
             >
