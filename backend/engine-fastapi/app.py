@@ -48,6 +48,26 @@ def _assign_trial_ids(top_trials: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         out.append(it2)
     return out
 
+
+def _build_contextual_query(query: str, previous_queries: List[str] | None) -> str:
+    current = query.strip()
+    if not previous_queries:
+        return current
+
+    cleaned_previous = [q.strip() for q in previous_queries if q and q.strip()]
+    if not cleaned_previous:
+        return current
+
+    primary = cleaned_previous[0]
+    recent = cleaned_previous[-2:]
+    parts: List[str] = [primary]
+    for q in recent:
+        if q not in parts:
+            parts.append(q)
+    if current not in parts:
+        parts.append(current)
+    return " ; ".join(parts)
+
 @app.post("/run")
 async def run(req: RunRequest):
     t0 = time.perf_counter()
@@ -55,6 +75,7 @@ async def run(req: RunRequest):
     location = (req.context.location or "").strip() or None
     query = req.query.strip()
     previous_queries = req.previousQueries or []
+    contextual_query = _build_contextual_query(query, previous_queries)
 
     expanded = expand_queries(condition, query, previous_queries if previous_queries else None)
 
@@ -93,8 +114,8 @@ async def run(req: RunRequest):
     deduped_pubs = dedupe_publications(pub_candidates)
 
     # Rank
-    ranked_pubs = rank_publications(deduped_pubs, f"{condition} {query}")
-    ranked_trials = rank_trials(trials_candidates, f"{condition} {query}", location)
+    ranked_pubs = rank_publications(deduped_pubs, f"{condition} {contextual_query}")
+    ranked_trials = rank_trials(trials_candidates, f"{condition} {contextual_query}", location)
 
     top_pubs = ranked_pubs[: settings.TOP_PAPERS]
     top_trs  = ranked_trials[: settings.TOP_TRIALS]
@@ -107,7 +128,7 @@ async def run(req: RunRequest):
     poolTotal = len(deduped_pubs) + len(trials_candidates)
 
     # Build deterministic brief (LLM comes later)
-    brief = build_deterministic_brief(condition, query, top_pubs, top_trs)
+    brief = build_deterministic_brief(condition, contextual_query, top_pubs, top_trs)
 
     valid_ids = set([p["citationId"] for p in top_pubs] + [t["citationId"] for t in top_trs])
     brief = validate_brief_citations(brief, valid_ids)
