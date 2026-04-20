@@ -64,12 +64,15 @@ async def run(req: RunRequest):
 
     async with httpx.AsyncClient() as client:
         # Retrieve in parallel (depth-first)
-        # --- MULTI QUERY RETRIEVAL (REAL FIX) ---
+        # --- BALANCED MULTI-QUERY RETRIEVAL ---
+        pub_per_query = max(1, settings.PUBMED_RETMAX // len(expanded["pubmed"]))
+        oa_per_query = max(1, settings.OPENALEX_PER_PAGE // len(expanded["openalex"]))
+
         pub_tasks = [
             fetch_pubmed_candidates(
                 client,
                 q,
-                retmax=settings.PUBMED_RETMAX,
+                retmax=pub_per_query,
                 tool=settings.PUBMED_TOOL,
                 email=settings.PUBMED_EMAIL,
             )
@@ -80,7 +83,7 @@ async def run(req: RunRequest):
             fetch_openalex_candidates(
                 client,
                 q,
-                per_page=settings.OPENALEX_PER_PAGE,
+                per_page=oa_per_query,
                 mailto=settings.OPENALEX_MAILTO,
             )
             for q in expanded["openalex"]
@@ -95,7 +98,7 @@ async def run(req: RunRequest):
             if isinstance(r, list) and r:
                 if r[0].get("source") == "pubmed":
                     pubmed_candidates.extend(r)
-                else:
+                elif r[0].get("source") == "openalex":
                     openalex_candidates.extend(r)
 
         trials_candidates: List[Dict[str, Any]] = []
