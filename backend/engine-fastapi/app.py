@@ -13,6 +13,7 @@ from core.utils import now_ts
 from retrievers.pubmed import fetch_pubmed_candidates
 from retrievers.openalex import fetch_openalex_candidates
 from pipeline.expand import expand_queries
+from pipeline.extract import rewrite_as_search_query
 from pipeline.dedupe import dedupe_publications
 from pipeline.rank import rank_publications, rank_trials
 from pipeline.brief import build_deterministic_brief
@@ -55,7 +56,11 @@ async def run(req: RunRequest):
     location = (req.context.location or "").strip() or None
     query = req.query.strip()
 
-    expanded = expand_queries(condition, query)
+    if settings.USE_GROQ and settings.GROQ_API_KEY:
+        search_query = rewrite_as_search_query(condition, query)
+    else:
+        search_query = query
+    expanded = expand_queries(condition, search_query)
 
     async with httpx.AsyncClient() as client:
         # Retrieve in parallel (depth-first)
