@@ -512,7 +512,7 @@ export default function FirstRunPage() {
           <h1
             className="font-serif leading-none font-bold tracking-tight"
             style={{
-              fontSize: '4.25rem',
+              fontSize: 'clamp(3rem, 12vw, 4.25rem)',
               background: 'linear-gradient(180deg, #7f2133 0%, #5d1725 100%)',
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
@@ -551,7 +551,7 @@ export default function FirstRunPage() {
           transition={{ delay: 0.9, duration: 0.7 }}
         >
           <div
-            className="rounded-[18px] p-8 relative overflow-hidden"
+            className="rounded-[18px] p-6 sm:p-8 relative overflow-hidden"
             style={{
               background: 'rgba(255,252,247,0.82)',
               backdropFilter: 'blur(22px)',

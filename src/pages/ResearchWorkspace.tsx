@@ -993,7 +993,7 @@ export default function ResearchWorkspace() {
     <div className="min-h-screen bg-parchment-50 pb-16">
 
       {/* Top Bar */}
-      <header className="sticky top-0 z-50 border-b border-parchment-200/50 px-6 py-3"
+      <header className="sticky top-0 z-50 border-b border-parchment-200/50 px-4 sm:px-6 py-3"
         style={{ background: 'rgba(255,253,247,0.8)', backdropFilter: 'blur(12px)' }}>
         <div className="max-w-7xl mx-auto flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
@@ -1064,7 +1064,7 @@ export default function ResearchWorkspace() {
       </header>
 
       {/* Query Bar */}
-      <div className="px-6 py-4">
+      <div className="px-4 sm:px-6 py-4">
         <form onSubmit={handleSubmitQuery} className="relative max-w-3xl mx-auto">
           <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#6B1D2A]/45 text-sm">⌕</span>
           <input
@@ -1094,7 +1094,7 @@ export default function ResearchWorkspace() {
 
       {/* Constellation */}
       {activeRevision && activeRevision.papers.length + activeRevision.trials.length > 0 && (
-        <div className="px-6 pt-4 max-w-7xl mx-auto">
+        <div className="px-4 sm:px-6 pt-4 max-w-7xl mx-auto">
           <CitationConstellation
             condition={context.condition}
             papers={activeRevision.papers}
@@ -1108,7 +1108,7 @@ export default function ResearchWorkspace() {
       )}
 
       {/* Main Layout */}
-      <div className="px-6 py-8 max-w-7xl mx-auto flex flex-col gap-8 xl:flex-row">
+      <div className="px-4 sm:px-6 py-8 max-w-7xl mx-auto flex flex-col gap-8 xl:flex-row">
         <main className="flex-1 min-w-0">
           {!activeRevision || appState === 'no_results' || appState === 'running' ? (
             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="text-center py-20">
@@ -1223,7 +1223,7 @@ export default function ResearchWorkspace() {
       </div>
 
       {/* Bottom Bar */}
-      <div className="fixed bottom-0 left-0 right-0 border-t border-parchment-200/50 px-6 py-3 z-50"
+      <div className="fixed bottom-0 left-0 right-0 border-t border-parchment-200/50 px-4 sm:px-6 py-3 z-50"
         style={{ background: 'rgba(255,253,247,0.8)', backdropFilter: 'blur(12px)' }}>
         <div className="max-w-7xl mx-auto flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-2 overflow-x-auto pb-1">
@@ -1260,7 +1260,7 @@ export default function ResearchWorkspace() {
 
       {/* Trace Drawer */}
       <Sheet open={drawerOpen} onOpenChange={(open) => !open && closeDrawer()}>
-        <SheetContent side="right" className="w-[380px] bg-parchment-50 border-l border-parchment-200/50 overflow-y-auto">
+        <SheetContent side="right" className="w-[100vw] sm:w-[380px] bg-parchment-50 border-l border-parchment-200/50 overflow-y-auto">
           {drawerPaper && (
             <div className="pt-8 px-1">
               <span className={`text-[9px] font-mono px-2.5 py-1 rounded-full ${
