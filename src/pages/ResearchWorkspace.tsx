@@ -870,6 +870,9 @@ export default function ResearchWorkspace() {
       return;
     }
     setAppState('running');
+    const previousQueries = revisions.map(r => r.query);
+    const primaryQuery = previousQueries[0];
+    const contextualQuery = primaryQuery ? `${primaryQuery} ; ${q}` : q;
     try {
       const res = await fetch(`${import.meta.env.VITE_API_URL}/api/research/run`, {
         method: 'POST',
@@ -878,7 +881,7 @@ export default function ResearchWorkspace() {
           sessionId,
           query: q,
           context: { ...context, condition: conditionToCheck },
-          previousQueries: revisions.map(r => r.query),
+          previousQueries,
         }),
       });
       if (!res.ok) {
@@ -931,7 +934,7 @@ export default function ResearchWorkspace() {
         const rankRes = await fetch(`${engineUrl}/rank-trials`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ trials, query: q, location: context.location || '' }),
+          body: JSON.stringify({ trials, query: contextualQuery, location: context.location || '' }),
         });
         const rankData = await rankRes.json();
         data.revision.trials = rankData.trials;
@@ -944,6 +947,7 @@ export default function ResearchWorkspace() {
             body: JSON.stringify({
               condition: context.condition,
               query: q,
+              previousQueries,
               papers: data.revision.papers,
               trials: rankData.trials,
               brief: data.revision.brief,

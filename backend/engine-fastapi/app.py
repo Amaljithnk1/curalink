@@ -215,10 +215,26 @@ async def merge_and_brief(req: dict):
     """
     condition = req.get("condition", "")
     query     = req.get("query", "")
+    previous_queries = req.get("previousQueries", []) or []
+    existing_brief = req.get("brief")
     papers    = req.get("papers", [])   # already have citationId P#
     trials    = req.get("trials", [])   # ranked trials with citationId T#
 
-    new_brief = build_deterministic_brief(condition, query, papers, trials)
+    contextual_query = _build_contextual_query(query, previous_queries)
+    rebuilt_brief = build_deterministic_brief(condition, contextual_query, papers, trials)
+
+    # Preserve LLM-crafted sections and only refresh the trial-focused section
+    # so follow-up answers do not regress to generic summaries.
+    if isinstance(existing_brief, dict):
+        condition_overview = existing_brief.get("conditionOverview")
+        research_insights = existing_brief.get("researchInsights")
+        if condition_overview and research_insights:
+            new_brief = dict(existing_brief)
+            new_brief["clinicalTrialsSummary"] = rebuilt_brief["clinicalTrialsSummary"]
+        else:
+            new_brief = rebuilt_brief
+    else:
+        new_brief = rebuilt_brief
 
     valid_ids = {p["citationId"] for p in papers} | {t["citationId"] for t in trials}
     new_brief = validate_brief_citations(new_brief, valid_ids)
