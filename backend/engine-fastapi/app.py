@@ -81,7 +81,7 @@ async def run(req: RunRequest):
 
     async with httpx.AsyncClient() as client:
         pubmed_q = expanded["pubmed"][0]
-        openalex_q = expanded["openalex"][0]
+        openalex_queries = expanded["openalex"] or []
 
         pub_task = fetch_pubmed_candidates(
             client,
@@ -91,12 +91,26 @@ async def run(req: RunRequest):
             email=settings.PUBMED_EMAIL,
         )
 
-        oa_task = fetch_openalex_candidates(
-            client,
-            openalex_q,
-            per_page=settings.OPENALEX_PER_PAGE,
-            mailto=settings.OPENALEX_MAILTO,
-        )
+        async def fetch_openalex_with_fallback() -> List[Dict[str, Any]]:
+            last_error: Exception | None = None
+            for candidate_query in openalex_queries:
+                try:
+                    candidates = await fetch_openalex_candidates(
+                        client,
+                        candidate_query,
+                        per_page=settings.OPENALEX_PER_PAGE,
+                        mailto=settings.OPENALEX_MAILTO,
+                    )
+                    if candidates:
+                        return candidates
+                except Exception as exc:
+                    last_error = exc
+                    continue
+            if last_error:
+                print(f"OpenAlex fetch failed across fallback queries: {last_error}")
+            return []
+
+        oa_task = fetch_openalex_with_fallback()
 
         results = await asyncio.gather(pub_task, oa_task, return_exceptions=True)
 

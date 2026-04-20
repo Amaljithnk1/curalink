@@ -1,6 +1,7 @@
 from typing import Any, Dict, List
 from urllib.parse import quote_plus
 import httpx
+import asyncio
 
 from core.utils import first_sentences, normalize_whitespace
 
@@ -33,9 +34,28 @@ async def fetch_openalex_candidates(
     if mailto:
         params["mailto"] = mailto
 
-    r = await client.get(OPENALEX_WORKS, params=params, timeout=20)
-    r.raise_for_status()
-    data = r.json()
+    data = None
+    last_error: Exception | None = None
+    # Transient OpenAlex failures (timeouts/429/5xx) can happen under repeated
+    # follow-up queries. Retry a few times before giving up.
+    for attempt in range(3):
+        try:
+            r = await client.get(OPENALEX_WORKS, params=params, timeout=25)
+            r.raise_for_status()
+            data = r.json()
+            break
+        except (httpx.TimeoutException, httpx.RequestError, httpx.HTTPStatusError) as exc:
+            last_error = exc
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            retryable = isinstance(exc, (httpx.TimeoutException, httpx.RequestError)) or status in {429, 500, 502, 503, 504}
+            if (not retryable) or attempt == 2:
+                raise
+            await asyncio.sleep(0.4 * (attempt + 1))
+
+    if data is None:
+        if last_error:
+            raise last_error
+        return []
     works = data.get("results", []) or []
 
     out: List[Dict[str, Any]] = []
