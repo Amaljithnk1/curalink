@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote_plus
 import httpx
@@ -9,7 +10,11 @@ PUBMED_ESEARCH = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
 PUBMED_EFETCH  = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
 
 def _parse_pubmed_xml(xml_text: str) -> List[Dict[str, Any]]:
-    root = etree.fromstring(xml_text.encode("utf-8"))
+    try:
+        root = etree.fromstring(xml_text.encode("utf-8"))
+    except Exception as e:
+        print(f"PubMed XML parse error: {e}")
+        return []
     articles: List[Dict[str, Any]] = []
 
     for article in root.findall(".//PubmedArticle"):
@@ -95,15 +100,25 @@ async def fetch_pubmed_candidates(
     if email:
         params["email"] = email
 
-    r = await client.get(PUBMED_ESEARCH, params=params, timeout=20)
-    r.raise_for_status()
-    data = r.json()
-    ids = data.get("esearchresult", {}).get("idlist", [])
+    # --- 1. Search for IDs ---
+    ids = []
+    for attempt in range(3):
+        try:
+            r = await client.get(PUBMED_ESEARCH, params=params, timeout=20)
+            r.raise_for_status()
+            data = r.json()
+            ids = data.get("esearchresult", {}).get("idlist", [])
+            break
+        except Exception as e:
+            if attempt == 2:
+                print(f"PubMed search failed: {e}")
+                return []
+            await asyncio.sleep(0.5 * (attempt + 1))
+
     if not ids:
         return []
 
-    import asyncio
-
+    # --- 2. Fetch Details in Batches ---
     async def fetch_batch(batch_ids: List[str]) -> List[Dict[str, Any]]:
         params2 = {
             "db": "pubmed",
@@ -113,13 +128,28 @@ async def fetch_pubmed_candidates(
         }
         if email:
             params2["email"] = email
-        r2 = await client.get(PUBMED_EFETCH, params=params2, timeout=60)
-        r2.raise_for_status()
-        return _parse_pubmed_xml(r2.text)
+        
+        for attempt in range(3):
+            try:
+                r2 = await client.get(PUBMED_EFETCH, params=params2, timeout=60)
+                r2.raise_for_status()
+                return _parse_pubmed_xml(r2.text)
+            except Exception as e:
+                if attempt == 2:
+                    print(f"PubMed batch fetch failed: {e}")
+                    return []
+                await asyncio.sleep(0.5 * (attempt + 1))
+        return []
 
     BATCH = 50
     batches = [ids[i:i+BATCH] for i in range(0, len(ids), BATCH)]
     batch_results = await asyncio.gather(*[fetch_batch(b) for b in batches], return_exceptions=True)
-    results = [item for r in batch_results if isinstance(r, list) for item in r]
+    
+    results = []
+    for r in batch_results:
+        if isinstance(r, list):
+            results.extend(r)
+        else:
+            print(f"PubMed batch error in gather: {r}")
 
     return results

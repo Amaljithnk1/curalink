@@ -1,12 +1,13 @@
 # retrievers/clinicaltrials.py
 from typing import Any, Dict, List, Optional
+import asyncio
 import httpx
 
 from core.utils import (
     location_match,
     normalize_whitespace,
     first_sentences,
-    split_location,          # ← already exists
+    split_location,
 )
 
 CT_BASE = "https://clinicaltrials.gov/api/v2/studies"
@@ -68,7 +69,7 @@ async def fetch_trials_candidates(
         extra = params.get("query.term", "")
         params["query.term"] = f"{extra} {geo}".strip()
 
-    # ----------- API call ------------------------------------------
+    # ----------- API call with Retry Logic --------------------------
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "application/json, text/plain, */*",
@@ -78,9 +79,28 @@ async def fetch_trials_candidates(
         "Referer": "https://clinicaltrials.gov/",
         "Origin": "https://clinicaltrials.gov",
     }
-    r = await client.get(CT_BASE, params=params, timeout=20, headers=headers)
-    r.raise_for_status()
-    data = r.json()
+
+    data = None
+    last_error = None
+    for attempt in range(3):
+        try:
+            r = await client.get(CT_BASE, params=params, timeout=20, headers=headers)
+            r.raise_for_status()
+            data = r.json()
+            break
+        except (httpx.TimeoutException, httpx.RequestError, httpx.HTTPStatusError) as exc:
+            last_error = exc
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            # Retry on timeouts, connection errors, and 429/5xx status codes
+            retryable = isinstance(exc, (httpx.TimeoutException, httpx.RequestError)) or (status and status in {429, 500, 502, 503, 504})
+            if not retryable or attempt == 2:
+                print(f"ClinicalTrials fetch failed on attempt {attempt+1}: {exc}")
+                break
+            await asyncio.sleep(0.5 * (attempt + 1))
+
+    if not data:
+        return []
+
     studies = data.get("studies", []) or []
 
     # ----------- parse ---------------------------------------------

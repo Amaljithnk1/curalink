@@ -824,6 +824,7 @@ export default function ResearchWorkspace() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editCondition, setEditCondition] = useState(context?.condition || '');
   const [editLocation, setEditLocation] = useState(context?.location || '');
+  const [loadingStep, setLoadingStep] = useState<string>('Synthesizing...');
 
   useEffect(() => {
     if (!context) navigate('/');
@@ -900,7 +901,6 @@ export default function ResearchWorkspace() {
     : new Set<CitationId>();
 
   const runQuery = async (q: string, overrideCondition?: string) => {
-    
     const conditionToCheck = overrideCondition || context?.condition || '';
     // Only validate on first query — follow-ups are always valid in context of the condition
     const isFollowUp = revisions.length > 0;
@@ -909,6 +909,8 @@ export default function ResearchWorkspace() {
       return;
     }
     setAppState('running');
+    setLoadingStep('Accessing medical databases...');
+
     const previousQueries = revisions.map(r => r.query);
     const primaryQuery = previousQueries[0];
     const contextualQuery = primaryQuery ? `${primaryQuery} ; ${q}` : q;
@@ -938,6 +940,7 @@ export default function ResearchWorkspace() {
       // Fetch trials from browser to bypass server IP block
       let trials: any[] = [];
       try {
+        setLoadingStep('Searching clinical trials...');
         const trialsRes = await fetch(
           `https://clinicaltrials.gov/api/v2/studies?format=json&pageSize=100&query.cond=${encodeURIComponent(conditionToCheck)}&query.term=${encodeURIComponent(q)}&filter.overallStatus=RECRUITING,ACTIVE_NOT_RECRUITING`
         );
@@ -969,6 +972,7 @@ export default function ResearchWorkspace() {
         });
 
         // Send to backend for ranking
+        setLoadingStep('Ranking evidence...');
         const engineUrl = import.meta.env.VITE_ENGINE_URL || 'http://localhost:8000';
         const rankRes = await fetch(`${engineUrl}/rank-trials`, {
           method: 'POST',
@@ -980,6 +984,7 @@ export default function ResearchWorkspace() {
 
         // Rebuild brief so clinical-trials section cites T1/T2 properly
         try {
+          setLoadingStep('Synthesizing brief...');
           const mergeRes = await fetch(`${engineUrl}/merge-and-brief`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1012,9 +1017,10 @@ export default function ResearchWorkspace() {
       setActiveRevision(data.revision.id);
       setViewMode('brief');
       setQueryInput('');
+      setAppState('complete');
     } catch (error) {
       console.error('Error submitting query:', error);
-      setAppState('context_set');
+      setAppState('error');
     }
   };
 
@@ -1122,7 +1128,7 @@ export default function ResearchWorkspace() {
           )}
           {appState === 'running' && (
             <span className="absolute right-12 top-1/2 -translate-y-1/2 text-[10px] font-mono text-burgundy/50 animate-pulse">
-              Synthesizing...
+              {loadingStep}
             </span>
           )}
         </form>
@@ -1149,9 +1155,29 @@ export default function ResearchWorkspace() {
       {/* Main Layout */}
       <div className="px-4 sm:px-6 py-8 max-w-7xl mx-auto flex flex-col gap-8 xl:flex-row">
         <main className="flex-1 min-w-0">
-          {!activeRevision || appState === 'no_results' || appState === 'running' ? (
+          {!activeRevision || appState === 'no_results' || appState === 'running' || appState === 'error' ? (
             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="text-center py-20">
-              {appState === 'no_results' ? (
+              {appState === 'error' ? (
+                <>
+                  <div className="inline-block mb-6">
+                    <div className="w-16 h-16 rounded-full bg-red-50 border border-red-100 flex items-center justify-center mx-auto">
+                      <span className="text-2xl">⚠️</span>
+                    </div>
+                  </div>
+                  <p className="font-serif text-xl text-red-900/80 mb-3">
+                    Something went wrong while processing your request
+                  </p>
+                  <p className="text-sm font-sans text-muted-foreground/50 mb-8">
+                    Our medical databases might be temporarily unavailable. Please try again in a moment.
+                  </p>
+                  <button 
+                    onClick={() => runQuery(queryInput || revisions[revisions.length-1]?.query || '')}
+                    className="px-6 py-2.5 text-[11px] font-sans font-medium text-white bg-burgundy rounded-full hover:bg-burgundy-dark transition-all shadow-sm shadow-burgundy/20"
+                  >
+                    Retry Query
+                  </button>
+                </>
+              ) : appState === 'no_results' ? (
                 <>
                   <p className="font-serif text-xl text-burgundy/60 mb-3">
                     No medical research database found for "{context?.condition}"

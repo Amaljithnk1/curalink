@@ -4,7 +4,7 @@ export type TrialId = `T${number}`;
 export type CitationId = PaperId | TrialId;
 
 // App States
-export type AppState = 'idle' | 'context_set' | 'running' | 'complete' | 'no_results';
+export type AppState = 'idle' | 'context_set' | 'running' | 'complete' | 'no_results' | 'error';
 export type ViewMode = 'brief' | 'papers' | 'trials';
 export type ConfidenceLevel = 'strong' | 'moderate' | 'emerging';
 export type TrialStatus = 'RECRUITING' | 'COMPLETED' | 'ACTIVE' | 'SUSPENDED';
