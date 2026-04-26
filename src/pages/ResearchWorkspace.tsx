@@ -58,21 +58,29 @@ function RetrievalRibbon({ stats }: {
       transition={{ duration: 0.5 }}
       className="px-6 py-2.5 bg-parchment-50 border-b border-parchment-200/60"
     >
-      <div className="max-w-5xl mx-auto flex items-center justify-center gap-1 text-[11px] font-mono text-muted-foreground/70">
-        <span className="text-blue-500/70">PubMed</span>{' '}
-        <span className="text-foreground/60 font-semibold"><AnimatedCounter target={stats.pubmedCount} reduceMotion={reduceMotion} /></span>
-        <span className="mx-1.5 text-parchment-200">·</span>
-        <span className="text-green-600/70">OpenAlex</span>{' '}
-        <span className="text-foreground/60 font-semibold"><AnimatedCounter target={stats.openalexCount} reduceMotion={reduceMotion} /></span>
-        <span className="mx-1.5 text-parchment-200">·</span>
-        <span className="text-amber-600/70">Trials</span>{' '}
-        <span className="text-foreground/60 font-semibold"><AnimatedCounter target={stats.trialsCount} reduceMotion={reduceMotion} /></span>
-        <span className="mx-3 text-parchment-200">│</span>
-        <span>Pool <span className="text-foreground/60 font-semibold"><AnimatedCounter target={stats.poolTotal} reduceMotion={reduceMotion} /></span></span>
-        <span className="mx-1">→</span>
-        <span>Shown <span className="text-foreground/60 font-semibold">{stats.shownPapers}</span> papers · <span className="text-foreground/60 font-semibold">{stats.shownTrials}</span> trials</span>
-        <span className="mx-3 text-parchment-200">│</span>
-        <span>{stats.timeSeconds}s</span>
+      <div className="max-w-5xl mx-auto flex flex-wrap items-center justify-center gap-x-1 gap-y-1.5 text-[11px] font-mono text-muted-foreground/70 leading-tight py-0.5">
+        <div className="flex items-center gap-1">
+          <span className="text-blue-500/70">PubMed</span>{' '}
+          <span className="text-foreground/60 font-semibold"><AnimatedCounter target={stats.pubmedCount} reduceMotion={reduceMotion} /></span>
+        </div>
+        <span className="mx-0.5 text-parchment-200 hidden sm:inline">·</span>
+        <div className="flex items-center gap-1">
+          <span className="text-green-600/70">OpenAlex</span>{' '}
+          <span className="text-foreground/60 font-semibold"><AnimatedCounter target={stats.openalexCount} reduceMotion={reduceMotion} /></span>
+        </div>
+        <span className="mx-0.5 text-parchment-200 hidden sm:inline">·</span>
+        <div className="flex items-center gap-1">
+          <span className="text-amber-600/70">Trials</span>{' '}
+          <span className="text-foreground/60 font-semibold"><AnimatedCounter target={stats.trialsCount} reduceMotion={reduceMotion} /></span>
+        </div>
+        <span className="mx-2 text-parchment-200 hidden md:inline">│</span>
+        <div className="flex items-center gap-1 whitespace-nowrap">
+          <span>Pool <span className="text-foreground/60 font-semibold"><AnimatedCounter target={stats.poolTotal} reduceMotion={reduceMotion} /></span></span>
+          <span className="mx-0.5 text-parchment-200">→</span>
+          <span>Shown <span className="text-foreground/60 font-semibold">{stats.shownPapers}</span>p <span className="text-parchment-200 mx-0.5">·</span> <span className="text-foreground/60 font-semibold">{stats.shownTrials}</span>t</span>
+        </div>
+        <span className="mx-2 text-parchment-200 hidden sm:inline">│</span>
+        <span className="opacity-60">{stats.timeSeconds}s</span>
       </div>
     </motion.div>
   );
@@ -89,13 +97,39 @@ function CitationConstellation({
   highlightedId: CitationId | null;
   onHover: (id: CitationId | null) => void;
 }) {
-  const center = { x: 180, y: 180 };
+  const [dimensions, setDimensions] = useState({ width: 360, height: 360 });
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const updateDimensions = () => {
+      if (containerRef.current) {
+        const width = containerRef.current.offsetWidth;
+        setDimensions({ width, height: Math.min(width, 400) });
+      }
+    };
+    updateDimensions();
+    window.addEventListener('resize', updateDimensions);
+    return () => window.removeEventListener('resize', updateDimensions);
+  }, []);
+
+  const center = { x: dimensions.width / 2, y: dimensions.height / 2 };
+  const baseRadius = Math.min(dimensions.width, dimensions.height) * 0.3;
+
   const sourceItems = [
-    ...papers.map((paper, index) => ({
-      id: paper.citationId as CitationId,
-      label: paper.authors.split(',')[0] || `Paper ${index + 1}`,
-      type: paper.source === 'pubmed' ? ('pubmed' as const) : ('openalex' as const),
-    })),
+    ...papers.map((paper, index) => {
+      const firstAuthor = paper.authors.split(',')[0].trim();
+      const label = (firstAuthor && firstAuthor !== 'Unknown' && firstAuthor !== 'Various Authors') 
+        ? firstAuthor 
+        : (paper.journal && paper.journal !== 'PubMed' && paper.journal !== 'OpenAlex')
+          ? paper.journal.split(' ')[0]
+          : `Paper ${index + 1}`;
+          
+      return {
+        id: paper.citationId as CitationId,
+        label,
+        type: paper.source === 'pubmed' ? ('pubmed' as const) : ('openalex' as const),
+      };
+    }),
     ...trials.map((trial, index) => ({
       id: trial.citationId as CitationId,
       label: `Trial ${index + 1}`,
@@ -108,7 +142,7 @@ function CitationConstellation({
     ...sourceItems.map((item, index) => {
       const total = sourceItems.length;
       const angle = (index / Math.max(1, total)) * Math.PI * 2 - Math.PI / 2;
-      const radius = 110 + (index % 2) * 28 + Math.floor(index / 5) * 12;
+      const radius = baseRadius + (index % 2) * (baseRadius * 0.25) + Math.floor(index / 5) * 12;
       return {
         ...item,
         x: center.x + Math.cos(angle) * radius,
@@ -149,7 +183,7 @@ function CitationConstellation({
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.65 }}
-      className="rounded-3xl border border-parchment-200/70 bg-white/85 p-4 shadow-sm shadow-burgundy/5"
+      className="rounded-3xl border border-parchment-200/70 bg-white/85 p-4 shadow-sm shadow-burgundy/5 overflow-hidden"
       style={{ background: 'radial-gradient(circle at center, rgba(255,253,247,0.95) 0%, rgba(255,245,224,0.55) 55%, rgba(255,255,255,0.88) 100%)' }}
     >
       <div className="flex items-center justify-between mb-3">
@@ -158,7 +192,11 @@ function CitationConstellation({
           <p className="text-sm font-sans text-[#1a1a1a]">Evidence map for cited sources</p>
         </div>
       </div>
-      <svg viewBox="0 0 360 360" className="w-full h-[280px] overflow-visible">
+      <div ref={containerRef} className="w-full aspect-square max-h-[360px] mx-auto">
+        <svg
+          viewBox={`0 0 ${dimensions.width} ${dimensions.height}`}
+          className="w-full h-full overflow-visible"
+        >
         <defs>
           <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
             <feGaussianBlur stdDeviation="1.8" result="blur" />
@@ -257,7 +295,7 @@ function CitationConstellation({
                 x={node.x}
                 y={node.y + (isQuery ? 26 : 22)}
                 textAnchor="middle"
-                className="font-mono text-[11px]"
+                className={`font-mono ${isQuery ? 'text-[10px] sm:text-[11px]' : 'text-[8px] sm:text-[10px]'}`}
                 fill={isHighlighted ? '#6B1D2A' : '#44403C'}
                 opacity={isHighlighted ? 1 : 0.85}
                 fontWeight={isHighlighted ? '600' : '400'}
@@ -995,17 +1033,17 @@ export default function ResearchWorkspace() {
       {/* Top Bar */}
       <header className="sticky top-0 z-50 border-b border-parchment-200/50 px-4 sm:px-6 py-3"
         style={{ background: 'rgba(255,253,247,0.8)', backdropFilter: 'blur(12px)' }}>
-        <div className="max-w-7xl mx-auto flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-3 sm:gap-4">
             <h1 className="font-serif text-lg font-bold text-burgundy/90 cursor-pointer tracking-tight" onClick={() => navigate('/')}>
               Cura<span className="text-burgundy-light">Link</span>
             </h1>
-            <div className="flex flex-wrap gap-2">
-              <span className="px-3 py-1 text-[10px] font-sans bg-burgundy/[0.06] text-burgundy/70 rounded-full border border-burgundy/10">
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-0.5 sm:px-3 sm:py-1 text-[10px] font-sans bg-burgundy/[0.06] text-burgundy/70 rounded-full border border-burgundy/10 whitespace-nowrap">
                 {context.condition}
               </span>
               {context.location && (
-                <span className="px-3 py-1 text-[10px] font-sans bg-parchment-200/50 text-muted-foreground/60 rounded-full border border-parchment-200/60">
+                <span className="px-2.5 py-0.5 sm:px-3 sm:py-1 text-[10px] font-sans bg-parchment-200/50 text-muted-foreground/60 rounded-full border border-parchment-200/60 hidden xs:inline-block whitespace-nowrap">
                   📍 {context.location}
                 </span>
               )}
@@ -1015,7 +1053,7 @@ export default function ResearchWorkspace() {
           <div className="flex items-center gap-2">
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogTrigger asChild>
-                <button type="button" className="px-3 py-1.5 text-[11px] font-sans font-medium text-burgundy/70 bg-parchment-100 rounded-full border border-burgundy/10 hover:bg-burgundy/5 transition-all">
+                <button type="button" className="px-2.5 py-1 sm:px-3 sm:py-1.5 text-[10px] sm:text-[11px] font-sans font-medium text-burgundy/70 bg-parchment-100 rounded-full border border-burgundy/10 hover:bg-burgundy/5 transition-all">
                   Edit
                 </button>
               </DialogTrigger>

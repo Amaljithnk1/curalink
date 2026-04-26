@@ -44,7 +44,13 @@ def _parse_pubmed_xml(xml_text: str) -> List[Dict[str, Any]]:
             name = (fore + " " + last).strip() or (a.findtext("CollectiveName") or "").strip()
             if name:
                 authors.append(name)
-        authors_str = ", ".join(authors[:6]) if authors else "Unknown"
+        
+        if authors:
+            authors_str = ", ".join(authors[:6])
+        elif journal:
+            authors_str = journal
+        else:
+            authors_str = "Various Authors"
 
         # DOI
         doi = ""

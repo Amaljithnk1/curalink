@@ -75,7 +75,13 @@ async def fetch_openalex_candidates(
             nm = ((a.get("author") or {}).get("display_name") or "").strip()
             if nm:
                 author_names.append(nm)
-        authors_str = ", ".join(author_names) if author_names else "Unknown"
+        
+        if author_names:
+            authors_str = ", ".join(author_names)
+        elif venue and venue != "OpenAlex":
+            authors_str = venue
+        else:
+            authors_str = "Various Authors"
 
         url = (w.get("primary_location") or {}).get("landing_page_url") or w.get("id") or ""
         out.append({
