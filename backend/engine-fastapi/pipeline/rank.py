@@ -44,10 +44,13 @@ def rank_publications(candidates: List[Dict[str, Any]], query: str) -> List[Dict
     return ranked
 
 def rank_trials(candidates: List[Dict[str, Any]], query: str, user_location: str | None) -> List[Dict[str, Any]]:
+    if not candidates:
+        return []
     qtok = tokenize(query)
     ranked = []
     for it in candidates:
-        text = f"{it.get('title','')} {' '.join(it.get('locations',[]))}"
+        locs = it.get('locations') or []
+        text = f"{it.get('title','')} {' '.join(locs)}"
         dtok = tokenize(text)
         rel = _overlap_score(qtok, dtok)
 

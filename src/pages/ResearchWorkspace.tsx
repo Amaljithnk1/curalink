@@ -305,7 +305,8 @@ function CitationConstellation({
             </motion.g>
           );
         })}
-      </svg>
+        </svg>
+      </div>
     </motion.div>
   );
 }
