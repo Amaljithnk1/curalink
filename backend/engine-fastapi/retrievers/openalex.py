@@ -77,9 +77,9 @@ async def fetch_openalex_candidates(
                 author_names.append(nm)
         
         if author_names:
-            authors_str = ", ".join(author_names)
+            authors_str = ", ".join(str(a) for a in author_names)
         elif venue and venue != "OpenAlex":
-            authors_str = venue
+            authors_str = str(venue)
         else:
             authors_str = "Various Authors"
 

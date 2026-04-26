@@ -118,7 +118,7 @@ async def run(req: RunRequest):
             client,
             condition,
             trials_q,
-            page_size=settings.TRIALS_PAGESIZE,
+            page_size=settings.TRIALS_PAGE_SIZE,
             user_location=location
         )
 
