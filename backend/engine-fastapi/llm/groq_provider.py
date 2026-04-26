@@ -41,9 +41,11 @@ CRITICAL RULES:
 - Every section title MUST be unique, descriptive, and professional. NEVER use generic headers like "Condition Overview" or "Research Insights". Titles should include the condition or query topic.
 - The patient asked a SPECIFIC question. Answer THAT question directly in every section.
 - If this is a follow-up query, anchor your entire answer to the primary session question.
-- DO NOT include citation labels like (P1) or [T1] inside the text content.
-- CRITICAL: The "citations" array MUST have exactly one citationId for every sentence in the "content" (split by period). If a sentence has no specific source, use the most relevant one from the list.
+- DO NOT include citation labels like (P1), [P1], (T1), or [T1] anywhere in the "content" text.
+- CRITICAL: You must write clean, professional prose. The UI will automatically insert the citations based on your "citations" array.
+- The "citations" array MUST have exactly one citationId for every sentence in the "content" (split by period).
 - Each section's "citations" array should list the IDs (e.g., ["P1", "P3", "T2"]) corresponding to each sentence in the content.
+- If a sentence has no specific source, use the most relevant one from the list.
 - conditionOverview: Explain what is known about the specific topic (e.g. sunlight, vitamin D) in relation to the condition.
 - researchInsights: Give specific findings about the topic as it relates to the condition. Be direct and useful.
 - clinicalTrialsSummary: Mention any relevant trials or say what is known about clinical evidence for this topic.
