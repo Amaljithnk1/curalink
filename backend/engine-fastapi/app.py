@@ -12,6 +12,7 @@ from core.schemas import RunRequest, Revision
 from core.utils import now_ts
 from retrievers.pubmed import fetch_pubmed_candidates
 from retrievers.openalex import fetch_openalex_candidates
+from retrievers.clinicaltrials import fetch_trials_candidates
 from pipeline.expand import expand_queries
 from pipeline.dedupe import dedupe_publications
 from pipeline.rank import rank_publications, rank_trials
@@ -112,16 +113,25 @@ async def run(req: RunRequest):
 
         oa_task = fetch_openalex_with_fallback()
 
-        results = await asyncio.gather(pub_task, oa_task, return_exceptions=True)
+        trials_q = expanded.get("trials_term", [query])[0]
+        trials_task = fetch_trials_candidates(
+            client,
+            condition,
+            trials_q,
+            page_size=settings.TRIALS_PAGE_SIZE,
+            user_location=location
+        )
+
+        results = await asyncio.gather(pub_task, oa_task, trials_task, return_exceptions=True)
 
         pubmed_candidates = results[0] if isinstance(results[0], list) else []
         openalex_candidates = results[1] if isinstance(results[1], list) else []
-        trials_candidates: List[Dict[str, Any]] = []
+        trials_candidates = results[2] if isinstance(results[2], list) else []
 
     # Counts BEFORE dedupe
     pubmedCount = len(pubmed_candidates)
     openalexCount = len(openalex_candidates)
-    trialsCount = 0
+    trialsCount = len(trials_candidates)
 
     # Merge publications and dedupe
     pub_candidates = pubmed_candidates + openalex_candidates
